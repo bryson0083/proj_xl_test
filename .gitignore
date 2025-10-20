@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# 其他忽略文件夾
+BAK/
+spec/
+.claude/
+.pytest_cache/
+nul
+
+# 測試輸出檔案
+template_table_統一測試結果_*.xlsx
+template_table_統一測試結果_*.json
+template_renderer_obj_result_*.json
+template_non_table_輸出DEMO.xlsx
+template_table_輸出DEMO.xlsx
+template_renderer_obj_registry*.json
