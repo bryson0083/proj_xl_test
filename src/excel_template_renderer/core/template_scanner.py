@@ -10,6 +10,10 @@
 目的：讓模板掃描與註冊表建立機制內聚在一個模組中，
      便於其他模組調用，也方便維護和測試。
 """
+import logging
+
+logger = logging.getLogger(__name__)
+
 import uuid
 from typing import Dict, List
 
@@ -367,7 +371,7 @@ class TemplateScanner:
                     to_position=RangePosition(row=to_row, col=to_col, row_off=0, col_off=0)
                 )
                 
-                print(f"DEBUG: 建立TwoCellAnchor圖片物件 - from:({from_row},{from_col}) to:({to_row},{to_col})")
+                logger.debug(f"DEBUG: 建立TwoCellAnchor圖片物件 - from:({from_row},{from_col}) to:({to_row},{to_col})")
             else:
                 # OneCellAnchor - 沒有to位置
                 image_obj = ImageObject(
@@ -377,12 +381,12 @@ class TemplateScanner:
                     to_position=None
                 )
                 
-                print(f"DEBUG: 建立OneCellAnchor圖片物件 - from:({from_row},{from_col})")
+                logger.debug(f"DEBUG: 建立OneCellAnchor圖片物件 - from:({from_row},{from_col})")
                 
             cell_pos = CellPosition(row=from_row, col=from_col)
             
         except Exception as e:
-            print(f"DEBUG: 圖片物件建立失敗: {e}")
+            logger.debug(f"DEBUG: 圖片物件建立失敗: {e}")
             # 使用預設位置
             from_row, from_col = 1, 1
             image_obj = ImageObject(
@@ -494,16 +498,16 @@ class TemplateScanner:
         Args:
             containers: 容器清單
         """
-        print(f"=== 模板掃描結果摘要 ===")
-        print(f"掃描到 {len(containers)} 個工作表")
+        logger.debug(f"=== 模板掃描結果摘要 ===")
+        logger.debug(f"掃描到 {len(containers)} 個工作表")
         
         total_tags = 0
         total_objects = 0
         
         for container in containers:
-            print(f"\n工作表: {container.sheet_name}")
-            print(f"  容器ID: {container.container_id}")
-            print(f"  物件數量: {len(container.objects)}")
+            logger.debug(f"\n工作表: {container.sheet_name}")
+            logger.debug(f"  容器ID: {container.container_id}")
+            logger.debug(f"  物件數量: {len(container.objects)}")
             
             # 統計各類型物件
             simple_tag_count = len([obj for obj in container.objects if obj.obj_type == ObjectType.SIMPLE])
@@ -512,18 +516,18 @@ class TemplateScanner:
             image_count = len([obj for obj in container.objects if obj.obj_type == ObjectType.IMAGE_OBJ])
             text_count = len([obj for obj in container.objects if obj.obj_type == ObjectType.TEXT])
             
-            print(f"    簡單標籤: {simple_tag_count}")
-            print(f"    表格標籤: {table_tag_count}")
-            print(f"    表格物件: {table_count}")
-            print(f"    圖片物件: {image_count}")
-            print(f"    文字物件: {text_count}")
+            logger.debug(f"    簡單標籤: {simple_tag_count}")
+            logger.debug(f"    表格標籤: {table_tag_count}")
+            logger.debug(f"    表格物件: {table_count}")
+            logger.debug(f"    圖片物件: {image_count}")
+            logger.debug(f"    文字物件: {text_count}")
             
             total_tags += simple_tag_count + table_tag_count
             total_objects += len(container.objects)
         
-        print(f"\n總計:")
-        print(f"  標籤總數: {total_tags}")
-        print(f"  物件總數: {total_objects}")
+        logger.debug(f"\n總計:")
+        logger.debug(f"  標籤總數: {total_tags}")
+        logger.debug(f"  物件總數: {total_objects}")
     
     def _bind_tags_to_tables(self, tag_objects: List[ObjectInfo], 
                             table_objects: List[ObjectInfo]) -> tuple:

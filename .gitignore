@@ -15,6 +15,7 @@ spec/
 .claude/
 .pytest_cache/
 nul
+openspec/
 
 # 測試輸出檔案
 template_table_統一測試結果_*.xlsx

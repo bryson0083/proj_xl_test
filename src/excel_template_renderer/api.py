@@ -1,11 +1,15 @@
 """
 主要API接口
 """
+import logging
 import os
 import uuid
 from typing import Any, Dict, Optional
 
 from openpyxl import load_workbook, Workbook
+from openpyxl.utils import get_column_letter
+
+logger = logging.getLogger(__name__)
 
 from .core.parser import TemplateParser
 from .core.renderer import TemplateRenderer
@@ -56,7 +60,7 @@ def render_template(
         ...     date_rng_desc="2025/01/01 - 2025/01/31"
         ... )
         >>> result = render_template('template.xlsx', 'output.xlsx', **data)
-        >>> print(f"註冊表檔案: {result['registry_file']}")
+        >>> logger.debug(f"註冊表檔案: {result['registry_file']}")
     """
     # 生成程序ID
     if process_id is None:
@@ -190,20 +194,20 @@ def _render_container(
         renderer: 渲染器
         block_manager: 區塊管理器
     """
-    print(f"DEBUG: 使用新的block分區渲染搬移機制處理容器: {container.sheet_name}")
-    print(f"DEBUG: Calling block_manager.process_container_with_block_moving")
+    logger.debug(f"DEBUG: 使用新的block分區渲染搬移機制處理容器: {container.sheet_name}")
+    logger.debug(f"DEBUG: Calling block_manager.process_container_with_block_moving")
     
     try:
         # 使用新的block搬移機制
         block_manager.process_container_with_block_moving(container, workbook, render_context, renderer)
-        print(f"DEBUG: Successfully called process_container_with_block_moving")
+        logger.debug(f"DEBUG: Successfully called process_container_with_block_moving")
     except Exception as e:
-        print(f"DEBUG: Error in process_container_with_block_moving: {e}")
+        logger.debug(f"DEBUG: Error in process_container_with_block_moving: {e}")
         import traceback
-        traceback.print_exc()
+        logger.debug("例外堆疊", exc_info=True)
         raise
     
-    print(f"DEBUG: Finished processing container: {container.sheet_name}")
+    logger.debug(f"DEBUG: Finished processing container: {container.sheet_name}")
 
 
 def _build_tag_object_mapping_with_original_tags(containers, original_tags, render_context):
@@ -219,7 +223,7 @@ def _build_tag_object_mapping_with_original_tags(containers, original_tags, rend
     """
     from .models.base import ObjectType
     
-    print(f"DEBUG_MAPPING: Building tag-object mapping with {len(original_tags)} original tags")
+    logger.debug(f"DEBUG_MAPPING: Building tag-object mapping with {len(original_tags)} original tags")
     
     # 建立位置到標籤清單的映射（支援同一位置多個標籤）
     position_to_tags = {}
@@ -228,17 +232,17 @@ def _build_tag_object_mapping_with_original_tags(containers, original_tags, rend
         if key not in position_to_tags:
             position_to_tags[key] = []
         position_to_tags[key].append(tag)
-        print(f"DEBUG_MAPPING: Tag {tag.tag_name} at position {key}")
+        logger.debug(f"DEBUG_MAPPING: Tag {tag.tag_name} at position {key}")
     
     # 為每個物件找到對應的標籤
     for container in containers:
-        print(f"DEBUG_MAPPING: Processing container {container.sheet_name} with {len(container.objects)} objects")
+        logger.debug(f"DEBUG_MAPPING: Processing container {container.sheet_name} with {len(container.objects)} objects")
         for obj in container.objects:
             # 處理標籤相關的物件（SIMPLE、TABLE和TABLE_OBJ類型）
             # TABLE_OBJ是標籤與表格物件綁定後的類型
             if obj.obj_type in [ObjectType.SIMPLE, ObjectType.TABLE, ObjectType.TABLE_OBJ]:
                 key = (obj.sheet_name, obj.cell_position.row, obj.cell_position.col)
-                print(f"DEBUG_MAPPING: Object {obj.obj_id} type={obj.obj_type} display_name={obj.display_name} at position {key}")
+                logger.debug(f"DEBUG_MAPPING: Object {obj.obj_id} type={obj.obj_type} display_name={obj.display_name} at position {key}")
                 # 對於TABLE_OBJ類型，需要特殊處理（因為綁定改變了位置）
                 if obj.obj_type == ObjectType.TABLE_OBJ:
                     # TABLE_OBJ的display_name保留了原始標籤名
@@ -249,7 +253,7 @@ def _build_tag_object_mapping_with_original_tags(containers, original_tags, rend
                             for tag in tags:
                                 if tag.tag_name == obj.display_name:
                                     matched_tag = tag
-                                    print(f"DEBUG_MAPPING: Found tag {tag.tag_name} for TABLE_OBJ {obj.obj_id}")
+                                    logger.debug(f"DEBUG_MAPPING: Found tag {tag.tag_name} for TABLE_OBJ {obj.obj_id}")
                                     break
                             if matched_tag:
                                 break
@@ -273,44 +277,9 @@ def _build_tag_object_mapping_with_original_tags(containers, original_tags, rend
                     
                 if matched_tag:
                     render_context.add_tag_mapping(obj.obj_id, matched_tag)
-                    print(f"DEBUG: 映射物件 {obj.obj_id} 到標籤 {matched_tag.tag_name} 在位置 ({matched_tag.cell_position.row}, {matched_tag.cell_position.col})")
+                    logger.debug(f"DEBUG: 映射物件 {obj.obj_id} 到標籤 {matched_tag.tag_name} 在位置 ({matched_tag.cell_position.row}, {matched_tag.cell_position.col})")
                 else:
-                    print(f"DEBUG: 警告 - 無法找到物件 {obj.obj_id} 的匹配標籤 at position {key}")
-
-
-def _build_tag_object_mapping_from_containers(containers, render_context):
-    """
-    從容器中的物件重建標籤到物件的映射關係
-    
-    注意：此函數已棄用，改用 _build_tag_object_mapping_with_original_tags
-    
-    Args:
-        containers: 容器清單
-        render_context: 渲染上下文
-    """
-    from .models.base import ObjectType
-    
-    for container in containers:
-        for obj in container.objects:
-            # 只處理標籤相關的物件（SIMPLE和TABLE類型）
-            if obj.obj_type in [ObjectType.SIMPLE, ObjectType.TABLE]:
-                # 根據物件資訊重建標籤物件
-                from .models.tag import Tag
-                from .models.base import TagType, DataType, RenderDirection
-                
-                tag = Tag(
-                    tag_name=obj.display_name,
-                    tag_type=TagType.TABLE if obj.obj_type == ObjectType.TABLE else TagType.SIMPLE,
-                    has_condition=not obj.having_header,  # 對SIMPLE和TABLE都檢查having_header
-                    condition="noheader" if not obj.having_header else None,  # 對SIMPLE和TABLE都適用
-                    cell_position=obj.cell_position,
-                    data_type=DataType.UNKNOWN,
-                    render_direction=RenderDirection.VERTICAL if obj.obj_type == ObjectType.TABLE else RenderDirection.HORIZONTAL,
-                    sheet_name=obj.sheet_name
-                )
-                
-                # 建立映射關係
-                render_context.add_tag_mapping(obj.obj_id, tag)
+                    logger.debug(f"DEBUG: 警告 - 無法找到物件 {obj.obj_id} 的匹配標籤 at position {key}")
 
 
 def _final_table_autofilter_sync(workbook: Workbook) -> None:
@@ -321,11 +290,11 @@ def _final_table_autofilter_sync(workbook: Workbook) -> None:
     Args:
         workbook: Excel工作簿
     """
-    print("DEBUG_FINAL_SYNC: 開始進行最終的表格範圍同步檢查")
+    logger.debug("DEBUG_FINAL_SYNC: 開始進行最終的表格範圍同步檢查")
     sync_count = 0
     
     for worksheet in workbook.worksheets:
-        print(f"DEBUG_FINAL_SYNC: 檢查工作表 {worksheet.title}")
+        logger.debug(f"DEBUG_FINAL_SYNC: 檢查工作表 {worksheet.title}")
         
         for table_name in worksheet.tables:
             table = worksheet.tables[table_name]
@@ -335,46 +304,22 @@ def _final_table_autofilter_sync(workbook: Workbook) -> None:
                 autofilter_ref = table.autoFilter.ref
                 
                 if table_ref != autofilter_ref:
-                    print(f"DEBUG_FINAL_SYNC: 發現不同步 - 表格 {table_name}")
-                    print(f"  table.ref: {table_ref}")
-                    print(f"  autoFilter.ref: {autofilter_ref}")
-                    print(f"  正在同步...")
+                    logger.debug(f"DEBUG_FINAL_SYNC: 發現不同步 - 表格 {table_name}")
+                    logger.debug(f"  table.ref: {table_ref}")
+                    logger.debug(f"  autoFilter.ref: {autofilter_ref}")
+                    logger.debug(f"  正在同步...")
                     
                     # 同步 autoFilter.ref
                     table.autoFilter.ref = table_ref
                     sync_count += 1
                     
-                    print(f"  已同步為: {table.autoFilter.ref}")
+                    logger.debug(f"  已同步為: {table.autoFilter.ref}")
                 else:
-                    print(f"DEBUG_FINAL_SYNC: 表格 {table_name} 範圍已同步: {table_ref}")
+                    logger.debug(f"DEBUG_FINAL_SYNC: 表格 {table_name} 範圍已同步: {table_ref}")
             else:
-                print(f"DEBUG_FINAL_SYNC: 表格 {table_name} 沒有 autoFilter")
+                logger.debug(f"DEBUG_FINAL_SYNC: 表格 {table_name} 沒有 autoFilter")
     
-    print(f"DEBUG_FINAL_SYNC: 同步檢查完成，共修正 {sync_count} 個表格")
-
-
-def _build_tag_object_mapping(containers, tags, render_context):
-    """
-    建立標籤到物件的映射關係
-    
-    Args:
-        containers: 容器清單
-        tags: 標籤清單  
-        render_context: 渲染上下文
-    """
-    # 建立位置到標籤的映射
-    position_to_tag = {}
-    for tag in tags:
-        key = (tag.sheet_name, tag.cell_position.row, tag.cell_position.col)
-        position_to_tag[key] = tag
-    
-    # 為每個物件找到對應的標籤
-    for container in containers:
-        for obj in container.objects:
-            key = (obj.sheet_name, obj.cell_position.row, obj.cell_position.col)
-            if key in position_to_tag:
-                tag = position_to_tag[key]
-                render_context.add_tag_mapping(obj.obj_id, tag)
+    logger.debug(f"DEBUG_FINAL_SYNC: 同步檢查完成，共修正 {sync_count} 個表格")
 
 
 def _generate_object_registry(containers: list, render_context: 'RenderContext', template_path: str, output_path: str) -> str:
@@ -419,7 +364,7 @@ def _generate_object_registry(containers: list, render_context: 'RenderContext',
             position_before = {
                 'row': obj.cell_position.row,
                 'col': obj.cell_position.col,
-                'coordinate': f"{chr(64 + obj.cell_position.col)}{obj.cell_position.row}",
+                'coordinate': f"{get_column_letter(obj.cell_position.col)}{obj.cell_position.row}",
                 'data_shape': {
                     'rows': obj.data_shape.rows,
                     'cols': obj.data_shape.cols
@@ -482,10 +427,10 @@ def _generate_object_registry(containers: list, render_context: 'RenderContext',
     # 序列化並儲存註冊表
     try:
         registry_file = RegistryUtils.serialize_registry(registry)
-        print(f"DEBUG: 物件註冊表已生成: {registry_file}")
+        logger.debug(f"DEBUG: 物件註冊表已生成: {registry_file}")
         return registry_file
     except Exception as e:
-        print(f"WARNING: 無法生成物件註冊表: {e}")
+        logger.warning(f"WARNING: 無法生成物件註冊表: {e}")
         return ""
 
 
@@ -503,11 +448,11 @@ def _validate_render_result(output_file: str, registry_file: str) -> bool:
     try:
         # 基本檔案存在性檢查
         if not os.path.exists(output_file):
-            print(f"WARNING: 輸出檔案不存在: {output_file}")
+            logger.warning(f"WARNING: 輸出檔案不存在: {output_file}")
             return False
 
         if registry_file and not os.path.exists(registry_file):
-            print(f"WARNING: 註冊表檔案不存在: {registry_file}")
+            logger.warning(f"WARNING: 註冊表檔案不存在: {registry_file}")
             return False
 
         # 如果有註冊表，驗證其格式
@@ -516,12 +461,12 @@ def _validate_render_result(output_file: str, registry_file: str) -> bool:
             is_valid, errors = RegistryUtils.validate_registry(registry)
 
             if not is_valid:
-                print(f"WARNING: 註冊表驗證失敗: {errors}")
+                logger.warning(f"WARNING: 註冊表驗證失敗: {errors}")
                 return False
 
-        print("DEBUG: 渲染結果驗證通過")
+        logger.debug("DEBUG: 渲染結果驗證通過")
         return True
 
     except Exception as e:
-        print(f"WARNING: 驗證過程發生錯誤: {e}")
+        logger.warning(f"WARNING: 驗證過程發生錯誤: {e}")
         return False

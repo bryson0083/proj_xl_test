@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 #!/usr/bin/env python3
 """
 表格物件驗證器
@@ -198,22 +202,22 @@ class TableValidator:
             dict: 完整驗證結果
         """
         try:
-            print(f"開始自動驗證: {excel_path}")
+            logger.debug(f"開始自動驗證: {excel_path}")
             
             # 1. 提取實際結果
-            print("1. 提取實際表格屬性...")
+            logger.debug("1. 提取實際表格屬性...")
             actual_result = self.extract_actual_tables(excel_path)
             
             # 2. 載入註冊表
-            print("2. 載入註冊表...")
+            logger.debug("2. 載入註冊表...")
             registry = self.registry_utils.load_registry(registry_path)
             
             # 3. 執行比對
-            print("3. 執行比對驗證...")
+            logger.debug("3. 執行比對驗證...")
             comparison = self.compare_with_registry(actual_result, registry)
             
             # 4. 生成報告
-            print("4. 生成驗證報告...")
+            logger.debug("4. 生成驗證報告...")
             report_path = self.generate_validation_report(comparison)
             
             # 5. 返回完整結果
@@ -225,11 +229,11 @@ class TableValidator:
                 'detailed_results': comparison
             }
             
-            print(f"驗證完成，準確率: {validation_result['accuracy_rate']}")
+            logger.debug(f"驗證完成，準確率: {validation_result['accuracy_rate']}")
             return validation_result
             
         except Exception as e:
-            print(f"自動驗證失敗: {str(e)}")
+            logger.debug(f"自動驗證失敗: {str(e)}")
             return {
                 'validation_successful': False,
                 'error': str(e),
@@ -477,31 +481,31 @@ class TableValidator:
         """列印驗證摘要"""
         summary = comparison['summary']
         
-        print("\n=== 表格驗證報告摘要 ===")
-        print(f"總工作表數: {summary['total_worksheets']}")
-        print(f"總物件數: {summary['total_objects']}")
-        print(f"驗證通過: {summary['validated_objects']}")
-        print(f"驗證失敗: {summary['failed_objects']}")
-        print(f"準確率: {summary['accuracy_rate']}")
+        logger.debug("\n=== 表格驗證報告摘要 ===")
+        logger.debug(f"總工作表數: {summary['total_worksheets']}")
+        logger.debug(f"總物件數: {summary['total_objects']}")
+        logger.debug(f"驗證通過: {summary['validated_objects']}")
+        logger.debug(f"驗證失敗: {summary['failed_objects']}")
+        logger.debug(f"準確率: {summary['accuracy_rate']}")
         
         # 列出失敗的物件
         for sheet_name, sheet_result in comparison['validation_results'].items():
             if not sheet_result['worksheet_valid']:
-                print(f"\n工作表 '{sheet_name}' 驗證失敗:")
+                logger.debug(f"\n工作表 '{sheet_name}' 驗證失敗:")
                 
                 for obj_name, obj_result in sheet_result['object_validations'].items():
                     if not obj_result['match_successful']:
-                        print(f"  - 物件 '{obj_name}': {len(obj_result['differences'])} 個差異")
+                        logger.debug(f"  - 物件 '{obj_name}': {len(obj_result['differences'])} 個差異")
                         for diff in obj_result['differences']:
-                            print(f"    * {diff['field']}: 預期 '{diff['expected']}' 實際 '{diff['actual']}'")
+                            logger.debug(f"    * {diff['field']}: 預期 '{diff['expected']}' 實際 '{diff['actual']}'")
                 
                 if sheet_result['missing_in_actual']:
-                    print(f"  - 缺少物件: {sheet_result['missing_in_actual']}")
+                    logger.debug(f"  - 缺少物件: {sheet_result['missing_in_actual']}")
                 
                 if sheet_result['extra_in_actual']:
-                    print(f"  - 多出物件: {sheet_result['extra_in_actual']}")
+                    logger.debug(f"  - 多出物件: {sheet_result['extra_in_actual']}")
         
-        print("========================\n")
+        logger.debug("========================\n")
     
     def _find_latest_result_file(self) -> str:
         """找出最新的結果檔案"""

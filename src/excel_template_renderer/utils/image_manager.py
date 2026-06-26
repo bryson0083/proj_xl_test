@@ -1,6 +1,10 @@
 """
 圖片物件管理器
 """
+import logging
+
+logger = logging.getLogger(__name__)
+
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
@@ -155,9 +159,9 @@ class ImageObjectManager:
                     col_off=to_col_off
                 )
                 
-                print(f"DEBUG: ImageManager掃描到TwoCellAnchor - from:({from_row},{from_col}) to:({to_row},{to_col})")
+                logger.debug(f"DEBUG: ImageManager掃描到TwoCellAnchor - from:({from_row},{from_col}) to:({to_row},{to_col})")
             else:
-                print(f"DEBUG: ImageManager掃描到OneCellAnchor - from:({from_row},{from_col})")
+                logger.debug(f"DEBUG: ImageManager掃描到OneCellAnchor - from:({from_row},{from_col})")
             
             # 確定錨點類型
             anchor_type = "TwoCellAnchor" if to_position else "OneCellAnchor"
@@ -189,16 +193,16 @@ class ImageObjectManager:
         """
         images = getattr(worksheet, '_images', [])
         if not images:
-            print("DEBUG: 工作表沒有圖片物件")
+            logger.debug("DEBUG: 工作表沒有圖片物件")
             return
         
-        print(f"DEBUG: 開始更新 {len(images)} 個圖片錨點")
+        logger.debug(f"DEBUG: 開始更新 {len(images)} 個圖片錨點")
         
         # 更新每個圖片的錨點
         for idx, image in enumerate(images):
             # 對工作表3這樣的情況，直接檢查圖片是否需要位移
             # 這裡簡化邏輯：對於footer區塊的圖片，直接應用位移
-            print(f"DEBUG: 處理圖片 {idx+1}")
+            logger.debug(f"DEBUG: 處理圖片 {idx+1}")
             self._update_image_anchor_direct(image, shift_info)
     
     def _update_image_anchor_direct(self, image, shift_info: ShiftInfo) -> None:
@@ -213,8 +217,8 @@ class ImageObjectManager:
             anchor = image.anchor
             anchor_type = type(anchor).__name__
 
-            print(f"DEBUG: 更新圖片錨點，位移量: {shift_info.shift_amount}")
-            print(f"DEBUG: 錨點類型: {anchor_type}")
+            logger.debug(f"DEBUG: 更新圖片錨點，位移量: {shift_info.shift_amount}")
+            logger.debug(f"DEBUG: 錨點類型: {anchor_type}")
 
             # 檢查原始錨點位置 - 使用正確的屬性名稱
             original_from_row = None
@@ -224,13 +228,13 @@ class ImageObjectManager:
             if hasattr(anchor, '_from') and anchor._from is not None:
                 if hasattr(anchor._from, 'row') and anchor._from.row is not None:
                     original_from_row = anchor._from.row
-                    print(f"DEBUG: 原始_from位置: {original_from_row} (0-based)")
+                    logger.debug(f"DEBUG: 原始_from位置: {original_from_row} (0-based)")
 
             # 讀取原始to位置 - 使用 to 屬性
             if hasattr(anchor, 'to') and anchor.to is not None:
                 if hasattr(anchor.to, 'row') and anchor.to.row is not None:
                     original_to_row = anchor.to.row
-                    print(f"DEBUG: 原始to位置: {original_to_row} (0-based)")
+                    logger.debug(f"DEBUG: 原始to位置: {original_to_row} (0-based)")
 
             # 判斷是否需要位移（如果圖片位於表格之後）
             should_shift = False
@@ -239,10 +243,10 @@ class ImageObjectManager:
                 # 需要轉換比較：0-based圖片位置 >= (1-based起始行 - 1)
                 if original_from_row >= (shift_info.start_row - 1):
                     should_shift = True
-                    print(f"DEBUG: 圖片需要位移（原始from位置 {original_from_row} >= 起始行 {shift_info.start_row-1}）")
+                    logger.debug(f"DEBUG: 圖片需要位移（原始from位置 {original_from_row} >= 起始行 {shift_info.start_row-1}）")
 
             if not should_shift:
-                print("DEBUG: 圖片不需要位移")
+                logger.debug("DEBUG: 圖片不需要位移")
                 return
 
             # 基於舊專案的正確做法進行更新
@@ -251,12 +255,12 @@ class ImageObjectManager:
             elif anchor_type == "OneCellAnchor":
                 self._adjust_one_cell_anchor_correctly(anchor, shift_info.shift_amount)
             else:
-                print(f"DEBUG: 未知錨點類型: {anchor_type}")
+                logger.debug(f"DEBUG: 未知錨點類型: {anchor_type}")
 
         except Exception as e:
-            print(f"DEBUG: 圖片錨點更新失敗: {e}")
+            logger.debug(f"DEBUG: 圖片錨點更新失敗: {e}")
             import traceback
-            traceback.print_exc()
+            logger.debug("例外堆疊", exc_info=True)
 
     def _adjust_two_cell_anchor_correctly(self, anchor, row_offset: int) -> None:
         """
@@ -267,11 +271,11 @@ class ImageObjectManager:
             row_offset: 行偏移量
         """
         if not hasattr(anchor, '_from') or not anchor._from:
-            print(f"DEBUG: TwoCellAnchor 圖片缺少 _from 屬性")
+            logger.debug(f"DEBUG: TwoCellAnchor 圖片缺少 _from 屬性")
             return
 
         if not hasattr(anchor, 'to') or not anchor.to:
-            print(f"DEBUG: TwoCellAnchor 圖片缺少 to 屬性")
+            logger.debug(f"DEBUG: TwoCellAnchor 圖片缺少 to 屬性")
             return
 
         # 保存原始的所有屬性值
@@ -301,11 +305,11 @@ class ImageObjectManager:
         if hasattr(anchor.to, 'colOff'):
             anchor.to.colOff = original_to_colOff
 
-        print(f"DEBUG: TwoCellAnchor 圖片位置已調整：")
-        print(f"DEBUG:   _from: 第{original_from_row}行 -> 第{anchor._from.row}行 (0-based)")
-        print(f"DEBUG:   to: 第{original_to_row}行 -> 第{anchor.to.row}行 (0-based)")
-        print(f"DEBUG:   rowOff 保持: _from({original_from_rowOff}), to({original_to_rowOff})")
-        print(f"DEBUG:   colOff 保持: _from({original_from_colOff}), to({original_to_colOff})")
+        logger.debug(f"DEBUG: TwoCellAnchor 圖片位置已調整：")
+        logger.debug(f"DEBUG:   _from: 第{original_from_row}行 -> 第{anchor._from.row}行 (0-based)")
+        logger.debug(f"DEBUG:   to: 第{original_to_row}行 -> 第{anchor.to.row}行 (0-based)")
+        logger.debug(f"DEBUG:   rowOff 保持: _from({original_from_rowOff}), to({original_to_rowOff})")
+        logger.debug(f"DEBUG:   colOff 保持: _from({original_from_colOff}), to({original_to_colOff})")
 
     def _adjust_one_cell_anchor_correctly(self, anchor, row_offset: int) -> None:
         """
@@ -316,7 +320,7 @@ class ImageObjectManager:
             row_offset: 行偏移量
         """
         if not hasattr(anchor, '_from') or not anchor._from:
-            print(f"DEBUG: OneCellAnchor 圖片缺少 _from 屬性")
+            logger.debug(f"DEBUG: OneCellAnchor 圖片缺少 _from 屬性")
             return
 
         # 保存原始的 rowOff 和 colOff 值
@@ -333,10 +337,10 @@ class ImageObjectManager:
         if hasattr(anchor._from, 'colOff'):
             anchor._from.colOff = original_from_colOff
 
-        print(f"DEBUG: OneCellAnchor 圖片位置已調整：")
-        print(f"DEBUG:   _from: 第{original_from_row}行 -> 第{anchor._from.row}行 (0-based)")
-        print(f"DEBUG:   rowOff 保持: {original_from_rowOff}")
-        print(f"DEBUG:   colOff 保持: {original_from_colOff}")
+        logger.debug(f"DEBUG: OneCellAnchor 圖片位置已調整：")
+        logger.debug(f"DEBUG:   _from: 第{original_from_row}行 -> 第{anchor._from.row}行 (0-based)")
+        logger.debug(f"DEBUG:   rowOff 保持: {original_from_rowOff}")
+        logger.debug(f"DEBUG:   colOff 保持: {original_from_colOff}")
     
     def _should_shift_image_object(self, image_obj: ImageObject, shift_info: ShiftInfo) -> bool:
         """
@@ -350,85 +354,6 @@ class ImageObjectManager:
             bool: 是否需要位移
         """
         return image_obj.from_position.row >= shift_info.start_row
-    
-    def _update_image_anchor(self, image, image_obj: ImageObject, shift_info: ShiftInfo) -> None:
-        """
-        更新單個圖片的錨點
-        
-        Args:
-            image: Excel圖片物件
-            image_obj: 圖片物件資訊
-            shift_info: 位移資訊
-        """
-        try:
-            anchor = image.anchor
-            
-            print(f"DEBUG: 更新圖片錨點，位移量: {shift_info.shift_amount}")
-            print(f"DEBUG: 錨點類型: {type(anchor)}")
-            
-            # 更新from位置 - 支援多種屬性名稱
-            from_updated = False
-            for from_attr in ['_from', 'from']:
-                if hasattr(anchor, from_attr):
-                    from_pos = getattr(anchor, from_attr)
-                    print(f"DEBUG: 找到{from_attr}屬性，類型: {type(from_pos)}")
-                    if hasattr(from_pos, 'row'):
-                        old_from_row = from_pos.row
-                        from_pos.row += shift_info.shift_amount
-                        print(f"DEBUG: 更新from位置: {old_from_row} -> {from_pos.row}")
-                        from_updated = True
-                        break
-            
-            # 更新to位置 - 支援多種屬性名稱  
-            to_updated = False
-            for to_attr in ['_to', 'to']:
-                if hasattr(anchor, to_attr):
-                    to_pos = getattr(anchor, to_attr)
-                    print(f"DEBUG: 找到{to_attr}屬性，類型: {type(to_pos)}")
-                    if hasattr(to_pos, 'row'):
-                        old_to_row = to_pos.row
-                        to_pos.row += shift_info.shift_amount
-                        print(f"DEBUG: 更新to位置: {old_to_row} -> {to_pos.row}")
-                        to_updated = True
-                        break
-            
-            # 更新圖片物件記錄
-            if image_obj.from_position:
-                old_from = image_obj.from_position.row
-                image_obj.from_position.row += shift_info.shift_amount
-                print(f"DEBUG: 更新圖片物件from記錄: {old_from} -> {image_obj.from_position.row}")
-                
-            if image_obj.to_position:
-                old_to = image_obj.to_position.row
-                image_obj.to_position.row += shift_info.shift_amount
-                print(f"DEBUG: 更新圖片物件to記錄: {old_to} -> {image_obj.to_position.row}")
-            
-            if not from_updated:
-                print(f"DEBUG: 警告 - 無法找到from位置屬性")
-            if not to_updated and (hasattr(anchor, '_to') or hasattr(anchor, 'to')):
-                print(f"DEBUG: 警告 - 無法找到to位置屬性")
-                
-            # 驗證更新後的位置
-            print(f"DEBUG: 更新後驗證:")
-            for from_attr in ['_from', 'from']:
-                if hasattr(anchor, from_attr):
-                    from_pos = getattr(anchor, from_attr)
-                    if hasattr(from_pos, 'row'):
-                        print(f"DEBUG: 驗證from位置({from_attr}): {from_pos.row}")
-                        break
-            for to_attr in ['_to', 'to']:
-                if hasattr(anchor, to_attr):
-                    to_pos = getattr(anchor, to_attr)
-                    if hasattr(to_pos, 'row'):
-                        print(f"DEBUG: 驗證to位置({to_attr}): {to_pos.row}")
-                        break
-                
-        except Exception as e:
-            print(f"DEBUG: 圖片錨點更新失敗: {e}")
-            import traceback
-            traceback.print_exc()
-            # 如果更新失敗，忽略錯誤但記錄日誌
-            pass
     
     def get_images_in_range(
         self, 

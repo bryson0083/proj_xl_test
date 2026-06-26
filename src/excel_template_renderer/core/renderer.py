@@ -1,6 +1,10 @@
 """
 數據渲染器
 """
+import logging
+
+logger = logging.getLogger(__name__)
+
 from typing import Any, Union, Optional
 import pandas as pd
 from datetime import datetime, date
@@ -43,7 +47,7 @@ class TemplateRenderer:
 
         # 更新表格範圍
         table.ref = new_range
-        print(f"DEBUG_SYNC: 表格 {debug_name} - table.ref 更新: {old_table_ref} -> {new_range}")
+        logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - table.ref 更新: {old_table_ref} -> {new_range}")
 
         # *** 關鍵修正：設定表格屬性避免Excel錯誤 ***
 
@@ -52,24 +56,24 @@ class TemplateRenderer:
             old_headerRowCount = table.headerRowCount
             # noheader模式實際上仍有表頭（保留的模板表頭），所以headerRowCount應該保持為1
             table.headerRowCount = 1  # 所有表格都有表頭（noheader模式保留模板表頭）
-            print(f"DEBUG_SYNC: 表格 {debug_name} - headerRowCount設為: {table.headerRowCount} (include_header={include_header}, 說明: {'動態表頭' if include_header else '保留模板表頭'})")
+            logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - headerRowCount設為: {table.headerRowCount} (include_header={include_header}, 說明: {'動態表頭' if include_header else '保留模板表頭'})")
 
         # 1.5. 處理autoFilter（同步更新範圍，不清除）
         if hasattr(table, 'autoFilter') and table.autoFilter:
             table.autoFilter.ref = new_range
-            print(f"DEBUG_SYNC: 表格 {debug_name} - autoFilter.ref 同步更新: {old_autofilter_ref} -> {new_range}")
+            logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - autoFilter.ref 同步更新: {old_autofilter_ref} -> {new_range}")
         else:
-            print(f"DEBUG_SYNC: 表格 {debug_name} - 沒有 autoFilter，跳過同步")
+            logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - 沒有 autoFilter，跳過同步")
 
         # 2. 設定totalsRowCount（關鍵修正：對於一般數據表格應設為None）
         if hasattr(table, 'totalsRowCount'):
             table.totalsRowCount = None  # 不需要合計行
-            print(f"DEBUG_SYNC: 表格 {debug_name} - totalsRowCount 設為: {table.totalsRowCount}")
+            logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - totalsRowCount 設為: {table.totalsRowCount}")
 
         # 3. 設定totalsRowShown（關鍵修正：應設為False）
         if hasattr(table, 'totalsRowShown'):
             table.totalsRowShown = False
-            print(f"DEBUG_SYNC: 表格 {debug_name} - totalsRowShown 設為: {table.totalsRowShown}")
+            logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - totalsRowShown 設為: {table.totalsRowShown}")
 
         # 4. 更新tableColumns（重要修正：根據include_header決定是否更新列定義）
         if (dataframe is not None and hasattr(dataframe, 'columns') and
@@ -83,24 +87,24 @@ class TemplateRenderer:
                     for i, column_name in enumerate(dataframe.columns):
                         col = TableColumn(id=i+1, name=str(column_name))
                         table.tableColumns.append(col)
-                    print(f"DEBUG_SYNC: 表格 {debug_name} - 更新tableColumns: {len(table.tableColumns)} 列")
+                    logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - 更新tableColumns: {len(table.tableColumns)} 列")
                     for i, col in enumerate(table.tableColumns):
-                        print(f"  列{i+1}: {col.name}")
+                        logger.debug(f"  列{i+1}: {col.name}")
                 else:
                     # noheader模式：完全保留原始tableColumns，不做任何修改
                     original_columns_count = len(table.tableColumns) if table.tableColumns else 0
-                    print(f"DEBUG_SYNC: 表格 {debug_name} - noheader模式，完全保留原始tableColumns")
-                    print(f"  原始列數: {original_columns_count}")
+                    logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - noheader模式，完全保留原始tableColumns")
+                    logger.debug(f"  原始列數: {original_columns_count}")
 
                     # 顯示原始的tableColumns
                     if table.tableColumns:
                         for i, col in enumerate(table.tableColumns):
-                            print(f"  保留列{i+1}: {col.name}")
+                            logger.debug(f"  保留列{i+1}: {col.name}")
                     else:
-                        print(f"  警告：原始tableColumns為空")
+                        logger.debug(f"  警告：原始tableColumns為空")
 
             except Exception as e:
-                print(f"DEBUG_SYNC: 表格 {debug_name} - tableColumns處理失敗: {str(e)}")
+                logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - tableColumns處理失敗: {str(e)}")
 
         # 5. 恢復原始表格樣式設定
         self._restore_table_style(table, original_style_info, debug_name)
@@ -108,7 +112,7 @@ class TemplateRenderer:
         # 6. 最終驗證表格屬性的一致性
         self._validate_table_properties(table, debug_name)
 
-        print(f"DEBUG_SYNC: 表格 {debug_name} - 所有屬性更新完成")
+        logger.debug(f"DEBUG_SYNC: 表格 {debug_name} - 所有屬性更新完成")
 
     def _validate_table_properties(self, table, debug_name: str = ""):
         """
@@ -121,19 +125,19 @@ class TemplateRenderer:
         try:
             # 驗證基本屬性
             if not hasattr(table, 'ref') or not table.ref:
-                print(f"DEBUG_VALIDATE: 警告 - 表格 {debug_name} 缺少有效的 ref 屬性")
+                logger.debug(f"DEBUG_VALIDATE: 警告 - 表格 {debug_name} 缺少有效的 ref 屬性")
                 return
 
             # 驗證 autoFilter 與 table.ref 的一致性
             if hasattr(table, 'autoFilter') and table.autoFilter:
                 if hasattr(table.autoFilter, 'ref'):
                     if table.autoFilter.ref != table.ref:
-                        print(f"DEBUG_VALIDATE: 警告 - 表格 {debug_name} autoFilter.ref 與 table.ref 不一致:")
-                        print(f"  table.ref: {table.ref}")
-                        print(f"  autoFilter.ref: {table.autoFilter.ref}")
+                        logger.debug(f"DEBUG_VALIDATE: 警告 - 表格 {debug_name} autoFilter.ref 與 table.ref 不一致:")
+                        logger.debug(f"  table.ref: {table.ref}")
+                        logger.debug(f"  autoFilter.ref: {table.autoFilter.ref}")
                         # 強制同步
                         table.autoFilter.ref = table.ref
-                        print(f"DEBUG_VALIDATE: 已強制同步 autoFilter.ref 到: {table.ref}")
+                        logger.debug(f"DEBUG_VALIDATE: 已強制同步 autoFilter.ref 到: {table.ref}")
 
             # 驗證 totalsRowCount 和 totalsRowShown 的一致性
             if hasattr(table, 'totalsRowCount') and hasattr(table, 'totalsRowShown'):
@@ -142,20 +146,20 @@ class TemplateRenderer:
 
                 if totals_count is None or totals_count == 0:
                     if totals_shown is True:
-                        print(f"DEBUG_VALIDATE: 修正 - 表格 {debug_name} totalsRowCount 為 {totals_count} 但 totalsRowShown 為 True")
+                        logger.debug(f"DEBUG_VALIDATE: 修正 - 表格 {debug_name} totalsRowCount 為 {totals_count} 但 totalsRowShown 為 True")
                         table.totalsRowShown = False
-                        print(f"DEBUG_VALIDATE: 已修正 totalsRowShown 為: False")
+                        logger.debug(f"DEBUG_VALIDATE: 已修正 totalsRowShown 為: False")
 
             # 驗證 headerRowCount 的合理性
             if hasattr(table, 'headerRowCount'):
                 header_count = table.headerRowCount
                 if header_count is not None and header_count not in [0, 1]:
-                    print(f"DEBUG_VALIDATE: 警告 - 表格 {debug_name} headerRowCount 值異常: {header_count}")
+                    logger.debug(f"DEBUG_VALIDATE: 警告 - 表格 {debug_name} headerRowCount 值異常: {header_count}")
 
-            print(f"DEBUG_VALIDATE: 表格 {debug_name} 屬性驗證完成")
+            logger.debug(f"DEBUG_VALIDATE: 表格 {debug_name} 屬性驗證完成")
 
         except Exception as e:
-            print(f"DEBUG_VALIDATE: 表格 {debug_name} 屬性驗證失敗: {str(e)}")
+            logger.debug(f"DEBUG_VALIDATE: 表格 {debug_name} 屬性驗證失敗: {str(e)}")
     
     def render_simple_tag(
         self, 
@@ -253,10 +257,10 @@ class TemplateRenderer:
             # 如果標籤在合併儲存格中，使用合併儲存格的左上角作為開始位置
             start_row = merge_range.min_row
             start_col = merge_range.min_col
-            print(f"DEBUG: 標籤 {tag.tag_name} 在合併儲存格中，調整起始位置為 ({start_row}, {start_col})")
+            logger.debug(f"DEBUG: 標籤 {tag.tag_name} 在合併儲存格中，調整起始位置為 ({start_row}, {start_col})")
         
         # 標準Simple標籤處理：根據是否有noheader決定是否渲染header
-        print(f"DEBUG_RENDER: Calling _render_simple_full_dataframe for {tag.tag_name}, has_noheader={has_noheader}")
+        logger.debug(f"DEBUG_RENDER: Calling _render_simple_full_dataframe for {tag.tag_name}, has_noheader={has_noheader}")
         self._render_simple_full_dataframe(dataframe, worksheet, start_row, start_col, has_noheader)
         
         # 設定標籤數據類型
@@ -283,8 +287,8 @@ class TemplateRenderer:
         import pandas as pd
         from datetime import datetime, date
         
-        print(f"DEBUG_SIMPLE_FULL: Entered _render_simple_full_dataframe, start=({start_row},{start_col}), noheader={has_noheader}")
-        print(f"DEBUG_SIMPLE_FULL: DataFrame shape={dataframe.shape}, columns={list(dataframe.columns)}")
+        logger.debug(f"DEBUG_SIMPLE_FULL: Entered _render_simple_full_dataframe, start=({start_row},{start_col}), noheader={has_noheader}")
+        logger.debug(f"DEBUG_SIMPLE_FULL: DataFrame shape={dataframe.shape}, columns={list(dataframe.columns)}")
         
         current_row = start_row
         
@@ -297,7 +301,7 @@ class TemplateRenderer:
         
         # 渲染數據行
         for row_idx, (_, row_data) in enumerate(dataframe.iterrows()):
-            print(f"DEBUG_UNIVERSAL_MERGE: 處理第{row_idx}行數據，行號{current_row + row_idx}")
+            logger.debug(f"DEBUG_UNIVERSAL_MERGE: 處理第{row_idx}行數據，行號{current_row + row_idx}")
             
             # 追蹤累積的列偏移量
             cumulative_offset = 0
@@ -314,7 +318,7 @@ class TemplateRenderer:
                     merge_span = merge_range.max_col - merge_range.min_col
                     if merge_span > 0:
                         cumulative_offset += merge_span
-                        print(f"DEBUG_UNIVERSAL_MERGE: col_idx={col_idx} 是合併主儲存格，跨度={merge_span}，累積偏移={cumulative_offset}")
+                        logger.debug(f"DEBUG_UNIVERSAL_MERGE: col_idx={col_idx} 是合併主儲存格，跨度={merge_span}，累積偏移={cumulative_offset}")
                 
                 # 檢查目標儲存格是否可用，如果被合併占用則找下一個可用列
                 elif self._is_cell_merged_and_not_top_left(worksheet, target_row, target_col):
@@ -322,7 +326,7 @@ class TemplateRenderer:
                     target_col = self._find_next_available_column(worksheet, target_row, target_col)
                     additional_offset = target_col - old_col
                     cumulative_offset += additional_offset
-                    print(f"DEBUG_UNIVERSAL_MERGE: col_idx={col_idx}被合併占用，從{old_col}跳到{target_col}，額外偏移={additional_offset}")
+                    logger.debug(f"DEBUG_UNIVERSAL_MERGE: col_idx={col_idx}被合併占用，從{old_col}跳到{target_col}，額外偏移={additional_offset}")
                 
                 cell = worksheet.cell(row=target_row, column=target_col)
                 
@@ -407,8 +411,8 @@ class TemplateRenderer:
             header_rows = 1 if (not skip_header and obj_info.having_header) else 0
             total_rows_needed = data_rows_needed + header_rows
             
-            print(f"DEBUG_TABLE_TAG: render_table_tag for {tag.tag_name}, skip_header={skip_header}, data_rows={data_rows_needed}")
-            print(f"DEBUG_TABLE_TAG: DataFrame columns={list(dataframe.columns)}")
+            logger.debug(f"DEBUG_TABLE_TAG: render_table_tag for {tag.tag_name}, skip_header={skip_header}, data_rows={data_rows_needed}")
+            logger.debug(f"DEBUG_TABLE_TAG: DataFrame columns={list(dataframe.columns)}")
             # 移除：self._copy_template_rows(worksheet, start_row, total_rows_needed - 1)
             
             # 渲染表頭（如果需要）
@@ -430,15 +434,15 @@ class TemplateRenderer:
             tag.data_type = DataType.DATAFRAME
             
             # 如果這是一個TABLE_OBJ類型，需要更新表格物件的範圍
-            print(f"DEBUG_TABLE_CHECK: obj_info.obj_type = {obj_info.obj_type}, ObjectType.TABLE_OBJ = {ObjectType.TABLE_OBJ}")
-            print(f"DEBUG_TABLE_CHECK: obj_info.obj_type == ObjectType.TABLE_OBJ: {obj_info.obj_type == ObjectType.TABLE_OBJ}")
-            print(f"DEBUG_TABLE_CHECK: obj_info.display_name = {obj_info.display_name}")
+            logger.debug(f"DEBUG_TABLE_CHECK: obj_info.obj_type = {obj_info.obj_type}, ObjectType.TABLE_OBJ = {ObjectType.TABLE_OBJ}")
+            logger.debug(f"DEBUG_TABLE_CHECK: obj_info.obj_type == ObjectType.TABLE_OBJ: {obj_info.obj_type == ObjectType.TABLE_OBJ}")
+            logger.debug(f"DEBUG_TABLE_CHECK: obj_info.display_name = {obj_info.display_name}")
             
             if obj_info.obj_type == ObjectType.TABLE_OBJ:
-                print(f"DEBUG_TABLE_OBJ: render_table_tag handling TABLE_OBJ for {obj_info.display_name}")
+                logger.debug(f"DEBUG_TABLE_OBJ: render_table_tag handling TABLE_OBJ for {obj_info.display_name}")
                 self._update_table_object_range(worksheet, obj_info, dataframe, tag, start_row, start_col, total_rows)
             else:
-                print(f"DEBUG_TABLE_CHECK: 不是 TABLE_OBJ 類型，跳過範圍更新")
+                logger.debug(f"DEBUG_TABLE_CHECK: 不是 TABLE_OBJ 類型，跳過範圍更新")
             
             return total_rows
             
@@ -479,7 +483,7 @@ class TemplateRenderer:
         try:
             # 找到對應的表格物件
             table_name = obj_info.display_name
-            print(f"DEBUG_TABLE_OBJ: render_table_object called for {table_name}")
+            logger.debug(f"DEBUG_TABLE_OBJ: render_table_object called for {table_name}")
             if table_name not in worksheet.tables:
                 raise RenderError(f"找不到表格物件: {table_name}")
 
@@ -496,7 +500,7 @@ class TemplateRenderer:
                 worksheet, table_name, original_start_row, dataframe
             )
 
-            print(f"DEBUG_TABLE_OBJ: 表格 {table_name} 原始起始行: {original_start_row}, 動態調整後起始行: {actual_start_row}")
+            logger.debug(f"DEBUG_TABLE_OBJ: 表格 {table_name} 原始起始行: {original_start_row}, 動態調整後起始行: {actual_start_row}")
 
             # 計算需要插入的行數
             data_rows_needed = len(dataframe)
@@ -536,7 +540,7 @@ class TemplateRenderer:
             # *** 新增：計算位置偏移量並更新圖片物件 ***
             row_offset = actual_start_row - original_start_row
             if row_offset != 0:
-                print(f"DEBUG_TABLE_OBJ: 檢測到位置偏移 {row_offset} 行，更新圖片物件位置")
+                logger.debug(f"DEBUG_TABLE_OBJ: 檢測到位置偏移 {row_offset} 行，更新圖片物件位置")
                 self._update_images_after_table_shift(worksheet, table_name, row_offset,
                                                      original_end_row, new_end_row)
 
@@ -615,9 +619,9 @@ class TemplateRenderer:
                     formula_columns[col_idx] = check_cell.value
         
         # 先偵測模板的合併模式
-        print(f"DEBUG_MERGE_DETECT: Starting merge detection for worksheet '{worksheet.title}'")
-        print(f"DEBUG_MERGE_DETECT: Template row: {template_cell_position[0] if template_cell_position else 'None'}")
-        print(f"DEBUG_MERGE_DETECT: Start col: {start_col}, DataFrame columns: {len(dataframe.columns)}")
+        logger.debug(f"DEBUG_MERGE_DETECT: Starting merge detection for worksheet '{worksheet.title}'")
+        logger.debug(f"DEBUG_MERGE_DETECT: Template row: {template_cell_position[0] if template_cell_position else 'None'}")
+        logger.debug(f"DEBUG_MERGE_DETECT: Start col: {start_col}, DataFrame columns: {len(dataframe.columns)}")
         
         merge_pattern = self._detect_template_merge_pattern(
             worksheet, 
@@ -626,7 +630,7 @@ class TemplateRenderer:
             len(dataframe.columns)
         ) if template_cell_position else {}
         
-        print(f"DEBUG_MERGE_DETECT: Detected merge pattern: {merge_pattern}")
+        logger.debug(f"DEBUG_MERGE_DETECT: Detected merge pattern: {merge_pattern}")
         
         for row_idx, (_, row_data) in enumerate(dataframe.iterrows()):
             current_row = start_row + row_idx
@@ -639,35 +643,35 @@ class TemplateRenderer:
                     merge_range = f"{self._get_column_letter(merge_start_col)}{current_row}:{self._get_column_letter(merge_end_col)}{current_row}"
                     try:
                         worksheet.merge_cells(merge_range)
-                        print(f"DEBUG_MERGE_CREATE: Created merge range {merge_range}")
+                        logger.debug(f"DEBUG_MERGE_CREATE: Created merge range {merge_range}")
                     except Exception as e:
-                        print(f"DEBUG_MERGE_CREATE: Failed to create merge {merge_range}: {e}")
+                        logger.debug(f"DEBUG_MERGE_CREATE: Failed to create merge {merge_range}: {e}")
             
             # 處理DataFrame中的數據列 - 使用智能列偏移
             cumulative_offset = 0
             
-            print(f"DEBUG_DATA_PLACE: Row {current_row} - Starting data placement")
-            print(f"DEBUG_DATA_PLACE: Columns: {list(dataframe.columns)}")
-            print(f"DEBUG_DATA_PLACE: Values: {list(row_data)}")
+            logger.debug(f"DEBUG_DATA_PLACE: Row {current_row} - Starting data placement")
+            logger.debug(f"DEBUG_DATA_PLACE: Columns: {list(dataframe.columns)}")
+            logger.debug(f"DEBUG_DATA_PLACE: Values: {list(row_data)}")
             
             for col_idx, value in enumerate(row_data):
                 # 計算基礎目標列位置
                 base_target_col = start_col + col_idx + cumulative_offset
                 target_col = base_target_col
                 
-                print(f"DEBUG_DATA_PLACE: Col {col_idx} ('{dataframe.columns[col_idx]}'): value='{value}', base_target={base_target_col}, cumulative_offset={cumulative_offset}")
+                logger.debug(f"DEBUG_DATA_PLACE: Col {col_idx} ('{dataframe.columns[col_idx]}'): value='{value}', base_target={base_target_col}, cumulative_offset={cumulative_offset}")
                 
                 # 檢查當前位置是否有合併儲存格
                 merge_range = self._find_merged_range_for_cell(worksheet, current_row, target_col)
                 
                 if merge_range:
-                    print(f"DEBUG_DATA_PLACE: Found merge at {target_col}: {merge_range}")
+                    logger.debug(f"DEBUG_DATA_PLACE: Found merge at {target_col}: {merge_range}")
                     # 如果是合併範圍的起始儲存格
                     if merge_range.min_row == current_row and merge_range.min_col == target_col:
                         # 計算合併跨度並更新偏移
                         merge_span = merge_range.max_col - merge_range.min_col
                         if merge_span > 0:
-                            print(f"DEBUG_DATA_PLACE: Is merge start cell, span={merge_span}")
+                            logger.debug(f"DEBUG_DATA_PLACE: Is merge start cell, span={merge_span}")
                             cumulative_offset += merge_span
                     # 如果不是起始儲存格，需要跳過
                     elif self._is_cell_merged_and_not_top_left(worksheet, current_row, target_col):
@@ -676,19 +680,19 @@ class TemplateRenderer:
                         target_col = self._find_next_available_column(worksheet, current_row, target_col)
                         additional_offset = target_col - old_col
                         cumulative_offset += additional_offset
-                        print(f"DEBUG_DATA_PLACE: Not merge start, jumping from {old_col} to {target_col}")
+                        logger.debug(f"DEBUG_DATA_PLACE: Not merge start, jumping from {old_col} to {target_col}")
                 else:
-                    print(f"DEBUG_DATA_PLACE: No merge at {target_col}")
+                    logger.debug(f"DEBUG_DATA_PLACE: No merge at {target_col}")
                 
                 cell = worksheet.cell(row=current_row, column=target_col)
                 
                 # 檢查是否為合併儲存格，如果是則跳過
                 from openpyxl.cell.cell import MergedCell
                 if isinstance(cell, MergedCell):
-                    print(f"DEBUG_DATA_PLACE: Cell at {target_col} is MergedCell, skipping")
+                    logger.debug(f"DEBUG_DATA_PLACE: Cell at {target_col} is MergedCell, skipping")
                     continue
                 
-                print(f"DEBUG_DATA_PLACE: PLACING '{value}' at column {target_col} (cell {self._get_column_letter(target_col)}{current_row})")
+                logger.debug(f"DEBUG_DATA_PLACE: PLACING '{value}' at column {target_col} (cell {self._get_column_letter(target_col)}{current_row})")
                 
                 # 檢查該欄位是否有公式
                 if col_idx in formula_columns:
@@ -703,7 +707,7 @@ class TemplateRenderer:
                             start_col + col_idx         # 目標列
                         )
                         cell.value = adjusted_formula
-                        print(f"DEBUG_DATA_PLACE: Set formula at {self._get_column_letter(target_col)}{current_row}")
+                        logger.debug(f"DEBUG_DATA_PLACE: Set formula at {self._get_column_letter(target_col)}{current_row}")
                 else:
                     # 處理不同的數據類型
                     if pd.isna(value):
@@ -714,7 +718,7 @@ class TemplateRenderer:
                         cell.value = value
                     else:
                         cell.value = str(value)
-                    print(f"DEBUG_DATA_PLACE: Successfully set value '{cell.value}' at {self._get_column_letter(target_col)}{current_row}")
+                    logger.debug(f"DEBUG_DATA_PLACE: Successfully set value '{cell.value}' at {self._get_column_letter(target_col)}{current_row}")
                 
                 # 複製模板樣式到數據單元格
                 if template_cell_position:
@@ -796,7 +800,7 @@ class TemplateRenderer:
             start_col: 開始列
         """
         # 渲染表頭（如果表格有表頭）
-        print(f"DEBUG_RENDER_TO_TABLE: 表格 {getattr(table, 'name', 'Unknown')} headerRowCount={table.headerRowCount}")
+        logger.debug(f"DEBUG_RENDER_TO_TABLE: 表格 {getattr(table, 'name', 'Unknown')} headerRowCount={table.headerRowCount}")
         if table.headerRowCount > 0:
             current_row = start_row
             for col_idx, column_name in enumerate(dataframe.columns):
@@ -837,18 +841,18 @@ class TemplateRenderer:
             # 檢查是否需要更新
             current_ref = getattr(table, 'ref', '')
             if current_ref != new_range:
-                print(f"DEBUG_DATA_RENDER: 偵測到表格範圍需要更新 - 當前: {current_ref} -> 應為: {new_range}")
+                logger.debug(f"DEBUG_DATA_RENDER: 偵測到表格範圍需要更新 - 當前: {current_ref} -> 應為: {new_range}")
                 # 使用統一方法更新表格範圍
                 table_name = getattr(table, 'name', 'Unknown')
                 # *** 修正：使用表格本身的 headerRowCount 來判斷 include_header ***
                 include_header = header_rows > 0
-                print(f"DEBUG_DATA_RENDER: 使用表格 headerRowCount={header_rows} 決定 include_header={include_header}")
+                logger.debug(f"DEBUG_DATA_RENDER: 使用表格 headerRowCount={header_rows} 決定 include_header={include_header}")
                 self._update_table_range_sync(table, new_range, f"[數據渲染後]{table_name}", dataframe, include_header)
             else:
-                print(f"DEBUG_DATA_RENDER: 表格範圍已經正確，無需更新: {current_ref}")
+                logger.debug(f"DEBUG_DATA_RENDER: 表格範圍已經正確，無需更新: {current_ref}")
 
         except Exception as e:
-            print(f"DEBUG_DATA_RENDER: 檢查表格範圍時發生錯誤: {str(e)}")
+            logger.debug(f"DEBUG_DATA_RENDER: 檢查表格範圍時發生錯誤: {str(e)}")
     
     def _copy_template_rows(self, worksheet: Worksheet, template_row: int, num_copies: int) -> None:
         """
@@ -870,7 +874,7 @@ class TemplateRenderer:
             return
             
         try:
-            print(f"DEBUG: 開始複製模板行 {template_row}，需要複製 {num_copies} 行")
+            logger.debug(f"DEBUG: 開始複製模板行 {template_row}，需要複製 {num_copies} 行")
             
             # Step 1: 記錄模板行的所有資訊（在插入行之前）
             template_data = self._capture_template_row_data(worksheet, template_row)
@@ -878,16 +882,16 @@ class TemplateRenderer:
             # Step 2: 在模板行下方插入新行（一次性插入所有需要的行）
             # 這會讓原有的其他內容往下推移
             worksheet.insert_rows(template_row + 1, num_copies)
-            print(f"DEBUG: 已插入 {num_copies} 行在第 {template_row + 1} 行")
+            logger.debug(f"DEBUG: 已插入 {num_copies} 行在第 {template_row + 1} 行")
             
             # Step 3: 將模板行的內容複製到新插入的每一行
             for copy_index in range(num_copies):
                 target_row = template_row + 1 + copy_index
                 self._copy_template_row_to_target(worksheet, template_data, template_row, target_row)
-                print(f"DEBUG: 已複製模板行到第 {target_row} 行")
+                logger.debug(f"DEBUG: 已複製模板行到第 {target_row} 行")
                 
         except Exception as e:
-            print(f"ERROR: 複製模板行失敗: {str(e)}")
+            logger.error(f"ERROR: 複製模板行失敗: {str(e)}")
             raise RenderError(f"複製模板行失敗: {str(e)}")
     
     def _capture_template_row_data(self, worksheet: Worksheet, template_row: int) -> dict:
@@ -1009,7 +1013,7 @@ class TemplateRenderer:
                     break
         
         if template_has_tag:
-            print(f"DEBUG: renderer - 模板行 {template_row} 包含標籤，不複製合併儲存格到數據行")
+            logger.debug(f"DEBUG: renderer - 模板行 {template_row} 包含標籤，不複製合併儲存格到數據行")
             # 標籤行不應該複製合併儲存格給數據行
             return
         
@@ -1034,9 +1038,9 @@ class TemplateRenderer:
                         existing_merge = self._find_merged_range_for_cell(worksheet, new_min_row, new_min_col)
                         if not existing_merge:
                             worksheet.merge_cells(new_range_string)
-                            print(f"DEBUG: renderer創建合併儲存格範圍: {new_range_string}")
+                            logger.debug(f"DEBUG: renderer創建合併儲存格範圍: {new_range_string}")
                     except Exception as e:
-                        print(f"DEBUG: 合併儲存格失敗 {new_range_string}: {e}")
+                        logger.debug(f"DEBUG: 合併儲存格失敗 {new_range_string}: {e}")
                         # 繼續處理，不中斷整個流程
     
     def _copy_cell_style_dict(self, cell) -> dict:
@@ -1074,7 +1078,7 @@ class TemplateRenderer:
             target_cell.number_format = style_dict['number_format']
             target_cell.protection = style_dict['protection']
         except Exception as e:
-            print(f"DEBUG: 套用樣式失敗: {e}")
+            logger.debug(f"DEBUG: 套用樣式失敗: {e}")
             # 繼續處理，不中斷流程
 
     def copy_styles_and_formulas(self, source_range: str, target_range: str, worksheet: Worksheet) -> None:
@@ -1256,12 +1260,12 @@ class TemplateRenderer:
                 
         except Exception as e:
             # 如果樣式複製失敗，不中斷渲染流程，但記錄詳細錯誤資訊
-            print(f"DEBUG: 嘗試設定儲存格樣式時發生錯誤: {e}")
+            logger.debug(f"DEBUG: 嘗試設定儲存格樣式時發生錯誤: {e}")
             # 嘗試安全地複製樣式，過濾掉問題的顏色值
             try:
                 self._safe_copy_cell_style(source_cell, target_cell)
             except Exception as safe_e:
-                print(f"DEBUG: 安全樣式複製也失敗: {safe_e}")
+                logger.debug(f"DEBUG: 安全樣式複製也失敗: {safe_e}")
 
     def _safe_copy_cell_style(self, source_cell, target_cell) -> None:
         """
@@ -1369,7 +1373,7 @@ class TemplateRenderer:
                 target_cell.number_format = source_cell.number_format
                 
         except Exception as e:
-            print(f"DEBUG: 安全樣式複製失敗: {e}")
+            logger.debug(f"DEBUG: 安全樣式複製失敗: {e}")
             # 最後的回退方案：只複製最基本的樣式
             try:
                 if source_cell.font:
@@ -1386,7 +1390,7 @@ class TemplateRenderer:
                         wrap_text=source_cell.alignment.wrap_text
                     )
             except Exception as final_e:
-                print(f"DEBUG: 最終樣式複製回退也失敗: {final_e}")
+                logger.debug(f"DEBUG: 最終樣式複製回退也失敗: {final_e}")
 
     def _find_merged_range_for_cell(self, worksheet: Worksheet, row: int, col: int):
         """
@@ -1442,7 +1446,7 @@ class TemplateRenderer:
                         span = merge_range.max_col - merge_range.min_col + 1
                         if col_offset >= 0 and col_offset < num_cols:
                             merge_info[col_offset] = span
-                            print(f"DEBUG: 偵測到合併模式 - 列{col_offset}跨度{span}列")
+                            logger.debug(f"DEBUG: 偵測到合併模式 - 列{col_offset}跨度{span}列")
         
         return merge_info
 
@@ -1551,7 +1555,7 @@ class TemplateRenderer:
                         
         except Exception as e:
             # 如果合併失敗，不中斷渲染流程
-            print(f"DEBUG: 合併儲存格複製失敗: {e}")
+            logger.debug(f"DEBUG: 合併儲存格複製失敗: {e}")
             pass
 
     def _get_column_letter(self, col_num: int) -> str:
@@ -1603,17 +1607,17 @@ class TemplateRenderer:
         try:
             # 找到對應的表格物件
             table_name = obj_info.display_name
-            print(f"DEBUG_TABLE_OBJ: 更新表格物件 {table_name} 的範圍")
+            logger.debug(f"DEBUG_TABLE_OBJ: 更新表格物件 {table_name} 的範圍")
 
             if table_name not in worksheet.tables:
-                print(f"DEBUG_TABLE_OBJ: 直接匹配失敗，嘗試位置匹配: {table_name}")
+                logger.debug(f"DEBUG_TABLE_OBJ: 直接匹配失敗，嘗試位置匹配: {table_name}")
                 # 嘗試根據位置匹配表格
                 matched_table = self._find_table_by_position(worksheet, start_row, start_col)
                 if matched_table:
                     table_name = matched_table
-                    print(f"DEBUG_TABLE_OBJ: 位置匹配成功: {table_name}")
+                    logger.debug(f"DEBUG_TABLE_OBJ: 位置匹配成功: {table_name}")
                 else:
-                    print(f"DEBUG_TABLE_OBJ: 警告 - 找不到表格物件: {table_name}")
+                    logger.debug(f"DEBUG_TABLE_OBJ: 警告 - 找不到表格物件: {table_name}")
                     return
 
             table = worksheet.tables[table_name]
@@ -1624,12 +1628,12 @@ class TemplateRenderer:
                 worksheet, table_name, original_start_row, dataframe
             )
 
-            print(f"DEBUG_TABLE_OBJ: 表格 {table_name} 原始起始行: {original_start_row}, 動態調整後起始行: {actual_start_row}")
+            logger.debug(f"DEBUG_TABLE_OBJ: 表格 {table_name} 原始起始行: {original_start_row}, 動態調整後起始行: {actual_start_row}")
 
             # 如果位置有變化，需要使用調整後的起始行
             if actual_start_row != original_start_row:
                 start_row = actual_start_row
-                print(f"DEBUG_TABLE_OBJ: 使用動態調整後的起始行: {start_row}")
+                logger.debug(f"DEBUG_TABLE_OBJ: 使用動態調整後的起始行: {start_row}")
             
             # 取得表格原始範圍
             from openpyxl.utils import range_boundaries
@@ -1651,8 +1655,8 @@ class TemplateRenderer:
             skip_header = tag.has_condition and tag.condition == "noheader"
             include_header = not skip_header
 
-            print(f"DEBUG_TABLE_OBJ: 表格 {table_name} - skip_header={skip_header}, include_header={include_header}")
-            print(f"DEBUG_TABLE_OBJ: tag.has_condition={tag.has_condition}, tag.condition='{tag.condition if tag.has_condition else 'None'}'")
+            logger.debug(f"DEBUG_TABLE_OBJ: 表格 {table_name} - skip_header={skip_header}, include_header={include_header}")
+            logger.debug(f"DEBUG_TABLE_OBJ: tag.has_condition={tag.has_condition}, tag.condition='{tag.condition if tag.has_condition else 'None'}'")
 
             # 使用統一方法更新表格範圍，確保 table.ref 和 autoFilter.ref 同步
             self._update_table_range_sync(table, new_range, table_name, dataframe, include_header)
@@ -1660,16 +1664,16 @@ class TemplateRenderer:
             # 立即驗證更新是否成功
             if hasattr(table, 'autoFilter') and table.autoFilter:
                 current_ref = table.autoFilter.ref
-                print(f"DEBUG_TABLE_OBJ: 驗證 - 當前 autoFilter.ref: {current_ref}")
+                logger.debug(f"DEBUG_TABLE_OBJ: 驗證 - 當前 autoFilter.ref: {current_ref}")
                 if current_ref != new_range:
-                    print(f"DEBUG_TABLE_OBJ: 警告！更新後驗證失敗，期望: {new_range}, 實際: {current_ref}")
+                    logger.debug(f"DEBUG_TABLE_OBJ: 警告！更新後驗證失敗，期望: {new_range}, 實際: {current_ref}")
             else:
-                print(f"DEBUG_TABLE_OBJ: 表格 {table_name} 沒有 autoFilter")
+                logger.debug(f"DEBUG_TABLE_OBJ: 表格 {table_name} 沒有 autoFilter")
             
         except Exception as e:
-            print(f"DEBUG_TABLE_OBJ: 更新表格物件範圍失敗: {str(e)}")
+            logger.debug(f"DEBUG_TABLE_OBJ: 更新表格物件範圍失敗: {str(e)}")
             import traceback
-            traceback.print_exc()
+            logger.debug("例外堆疊", exc_info=True)
 
     def _calculate_dynamic_table_start_row(
         self,
@@ -1696,14 +1700,14 @@ class TemplateRenderer:
             int: 動態調整後的起始行
         """
         try:
-            print(f"DEBUG_GAP: 開始計算表格 {current_table_name} 的動態起始位置")
+            logger.debug(f"DEBUG_GAP: 開始計算表格 {current_table_name} 的動態起始位置")
 
             # 獲取當前表格的列位置以判斷是否在同一個垂直列
             from openpyxl.utils import range_boundaries
             current_table = worksheet.tables[current_table_name]
             current_min_col, current_min_row, current_max_col, current_max_row = range_boundaries(current_table.ref)
 
-            print(f"DEBUG_GAP: 當前表格 {current_table_name} 列範圍: {current_min_col}-{current_max_col}")
+            logger.debug(f"DEBUG_GAP: 當前表格 {current_table_name} 列範圍: {current_min_col}-{current_max_col}")
 
             # 收集同一垂直列的表格（只考慮垂直方向推移）
             same_column_tables = []
@@ -1725,7 +1729,7 @@ class TemplateRenderer:
                             'table': table
                         }
                         same_column_tables.append(table_info)
-                        print(f"DEBUG_GAP: 同列表格 {table_name} - 行範圍:{min_row}-{max_row}, 列範圍:{min_col}-{max_col}")
+                        logger.debug(f"DEBUG_GAP: 同列表格 {table_name} - 行範圍:{min_row}-{max_row}, 列範圍:{min_col}-{max_col}")
 
                     # 保存原始位置信息
                     if not hasattr(self, '_original_table_positions'):
@@ -1738,7 +1742,7 @@ class TemplateRenderer:
 
             # 按起始行排序（只考慮同一垂直列的表格）
             same_column_tables.sort(key=lambda x: x['min_row'])
-            print(f"DEBUG_GAP: 在同一垂直列發現 {len(same_column_tables)} 個表格物件")
+            logger.debug(f"DEBUG_GAP: 在同一垂直列發現 {len(same_column_tables)} 個表格物件")
 
             # 找到當前表格在同列表格中的位置
             current_table_index = -1
@@ -1748,12 +1752,12 @@ class TemplateRenderer:
                     break
 
             if current_table_index == -1:
-                print(f"DEBUG_GAP: 找不到當前表格 {current_table_name} 在同列表格中，使用原始位置")
+                logger.debug(f"DEBUG_GAP: 找不到當前表格 {current_table_name} 在同列表格中，使用原始位置")
                 return original_start_row
 
             # 如果是同列中的第一個表格，直接使用原始位置
             if current_table_index == 0:
-                print(f"DEBUG_GAP: 當前表格是同列中的第一個表格，使用原始位置 {original_start_row}")
+                logger.debug(f"DEBUG_GAP: 當前表格是同列中的第一個表格，使用原始位置 {original_start_row}")
                 return original_start_row
 
             # 計算gap區域 - 只考慮同列中的上一個表格
@@ -1782,20 +1786,20 @@ class TemplateRenderer:
             # 新的起始位置 = 上一個表格的實際結束位置 + 原始gap區域大小
             new_start_row = previous_table_actual_max_row + original_gap_size
 
-            print(f"DEBUG_GAP: 同列上一個表格 {previous_table_name}:")
-            print(f"DEBUG_GAP:   原始max_row: {original_previous_max}")
-            print(f"DEBUG_GAP:   實際max_row: {previous_table_actual_max_row}")
-            print(f"DEBUG_GAP: 當前表格 {current_table_name}:")
-            print(f"DEBUG_GAP:   原始min_row: {original_current_min}")
-            print(f"DEBUG_GAP:   原始gap大小: {original_gap_size}")
-            print(f"DEBUG_GAP: 動態調整後起始行: {original_start_row} -> {new_start_row}")
+            logger.debug(f"DEBUG_GAP: 同列上一個表格 {previous_table_name}:")
+            logger.debug(f"DEBUG_GAP:   原始max_row: {original_previous_max}")
+            logger.debug(f"DEBUG_GAP:   實際max_row: {previous_table_actual_max_row}")
+            logger.debug(f"DEBUG_GAP: 當前表格 {current_table_name}:")
+            logger.debug(f"DEBUG_GAP:   原始min_row: {original_current_min}")
+            logger.debug(f"DEBUG_GAP:   原始gap大小: {original_gap_size}")
+            logger.debug(f"DEBUG_GAP: 動態調整後起始行: {original_start_row} -> {new_start_row}")
 
             return max(new_start_row, original_start_row)  # 確保不會往上移動
 
         except Exception as e:
-            print(f"DEBUG_GAP: 計算動態起始位置失敗: {str(e)}")
+            logger.debug(f"DEBUG_GAP: 計算動態起始位置失敗: {str(e)}")
             import traceback
-            traceback.print_exc()
+            logger.debug("例外堆疊", exc_info=True)
             return original_start_row
 
     def _update_images_after_table_shift(
@@ -1817,11 +1821,11 @@ class TemplateRenderer:
             new_end_row: 新結束行
         """
         try:
-            print(f"DEBUG_IMG_SHIFT: 開始更新圖片位置，偏移量: {row_offset}")
+            logger.debug(f"DEBUG_IMG_SHIFT: 開始更新圖片位置，偏移量: {row_offset}")
 
             # 檢查是否有圖片需要更新
             if not hasattr(worksheet, '_images') or not worksheet._images:
-                print(f"DEBUG_IMG_SHIFT: 工作表沒有圖片物件")
+                logger.debug(f"DEBUG_IMG_SHIFT: 工作表沒有圖片物件")
                 return
 
             for image in worksheet._images:
@@ -1838,7 +1842,7 @@ class TemplateRenderer:
                         if from_row > original_end_row:
                             # 圖片在原始表格下方，需要推移
                             self._adjust_image_anchor_position(anchor, row_offset)
-                            print(f"DEBUG_IMG_SHIFT: 調整了位置在表格下方的圖片")
+                            logger.debug(f"DEBUG_IMG_SHIFT: 調整了位置在表格下方的圖片")
 
                     # 處理OneCellAnchor類型
                     elif hasattr(anchor, '_from'):
@@ -1846,10 +1850,10 @@ class TemplateRenderer:
                         if from_row > original_end_row:
                             # 只調整_from位置
                             anchor._from.row = from_row + row_offset
-                            print(f"DEBUG_IMG_SHIFT: 調整了OneCellAnchor圖片位置")
+                            logger.debug(f"DEBUG_IMG_SHIFT: 調整了OneCellAnchor圖片位置")
 
         except Exception as e:
-            print(f"DEBUG_IMG_SHIFT: 更新圖片位置失敗: {str(e)}")
+            logger.debug(f"DEBUG_IMG_SHIFT: 更新圖片位置失敗: {str(e)}")
 
     def _adjust_image_anchor_position(self, anchor, row_offset: int) -> None:
         """
@@ -1882,10 +1886,10 @@ class TemplateRenderer:
             if hasattr(anchor.to, 'colOff'):
                 anchor.to.colOff = original_to_colOff
 
-            print(f"DEBUG_IMG_ADJUST: 圖片位置調整完成，偏移: {row_offset} 行")
+            logger.debug(f"DEBUG_IMG_ADJUST: 圖片位置調整完成，偏移: {row_offset} 行")
 
         except Exception as e:
-            print(f"DEBUG_IMG_ADJUST: 調整圖片錨點位置失敗: {str(e)}")
+            logger.debug(f"DEBUG_IMG_ADJUST: 調整圖片錨點位置失敗: {str(e)}")
 
     def _preserve_table_style(self, table, debug_name: str = "") -> dict:
         """
@@ -1909,13 +1913,13 @@ class TemplateRenderer:
                 style_info['show_row_stripes'] = table.tableStyleInfo.showRowStripes if hasattr(table.tableStyleInfo, 'showRowStripes') else True
                 style_info['show_column_stripes'] = table.tableStyleInfo.showColumnStripes if hasattr(table.tableStyleInfo, 'showColumnStripes') else False
 
-                print(f"DEBUG_STYLE: 保留表格 {debug_name} 樣式: {style_info['table_style_name']}")
-                print(f"  - showRowStripes: {style_info['show_row_stripes']}")
-                print(f"  - showFirstColumn: {style_info['show_first_column']}")
-                print(f"  - showLastColumn: {style_info['show_last_column']}")
-                print(f"  - showColumnStripes: {style_info['show_column_stripes']}")
+                logger.debug(f"DEBUG_STYLE: 保留表格 {debug_name} 樣式: {style_info['table_style_name']}")
+                logger.debug(f"  - showRowStripes: {style_info['show_row_stripes']}")
+                logger.debug(f"  - showFirstColumn: {style_info['show_first_column']}")
+                logger.debug(f"  - showLastColumn: {style_info['show_last_column']}")
+                logger.debug(f"  - showColumnStripes: {style_info['show_column_stripes']}")
             else:
-                print(f"DEBUG_STYLE: 表格 {debug_name} 沒有 tableStyleInfo，使用預設樣式")
+                logger.debug(f"DEBUG_STYLE: 表格 {debug_name} 沒有 tableStyleInfo，使用預設樣式")
                 style_info['table_style_name'] = None
                 style_info['show_first_column'] = False
                 style_info['show_last_column'] = False
@@ -1923,7 +1927,7 @@ class TemplateRenderer:
                 style_info['show_column_stripes'] = False
 
         except Exception as e:
-            print(f"DEBUG_STYLE: 保留表格樣式失敗: {str(e)}")
+            logger.debug(f"DEBUG_STYLE: 保留表格樣式失敗: {str(e)}")
             # 設定預設值
             style_info = {
                 'table_style_name': None,
@@ -1949,34 +1953,34 @@ class TemplateRenderer:
 
             # 確保有樣式信息可恢復
             if not style_info:
-                print(f"DEBUG_STYLE: 表格 {debug_name} 沒有樣式信息可恢復")
+                logger.debug(f"DEBUG_STYLE: 表格 {debug_name} 沒有樣式信息可恢復")
                 return
 
             # 創建或更新 tableStyleInfo
             if not hasattr(table, 'tableStyleInfo') or not table.tableStyleInfo:
                 table.tableStyleInfo = TableStyleInfo()
-                print(f"DEBUG_STYLE: 為表格 {debug_name} 創建新的 tableStyleInfo")
+                logger.debug(f"DEBUG_STYLE: 為表格 {debug_name} 創建新的 tableStyleInfo")
 
             # 恢復樣式屬性
             if style_info.get('table_style_name'):
                 table.tableStyleInfo.name = style_info['table_style_name']
-                print(f"DEBUG_STYLE: 恢復表格 {debug_name} 樣式名: {style_info['table_style_name']}")
+                logger.debug(f"DEBUG_STYLE: 恢復表格 {debug_name} 樣式名: {style_info['table_style_name']}")
 
             table.tableStyleInfo.showFirstColumn = style_info.get('show_first_column', False)
             table.tableStyleInfo.showLastColumn = style_info.get('show_last_column', False)
             table.tableStyleInfo.showRowStripes = style_info.get('show_row_stripes', True)
             table.tableStyleInfo.showColumnStripes = style_info.get('show_column_stripes', False)
 
-            print(f"DEBUG_STYLE: 恢復表格 {debug_name} 樣式設定完成")
-            print(f"  - showRowStripes: {table.tableStyleInfo.showRowStripes}")
-            print(f"  - showFirstColumn: {table.tableStyleInfo.showFirstColumn}")
-            print(f"  - showLastColumn: {table.tableStyleInfo.showLastColumn}")
-            print(f"  - showColumnStripes: {table.tableStyleInfo.showColumnStripes}")
+            logger.debug(f"DEBUG_STYLE: 恢復表格 {debug_name} 樣式設定完成")
+            logger.debug(f"  - showRowStripes: {table.tableStyleInfo.showRowStripes}")
+            logger.debug(f"  - showFirstColumn: {table.tableStyleInfo.showFirstColumn}")
+            logger.debug(f"  - showLastColumn: {table.tableStyleInfo.showLastColumn}")
+            logger.debug(f"  - showColumnStripes: {table.tableStyleInfo.showColumnStripes}")
 
         except Exception as e:
-            print(f"DEBUG_STYLE: 保留表格樣式設定失敗: {str(e)}")
+            logger.debug(f"DEBUG_STYLE: 保留表格樣式設定失敗: {str(e)}")
             import traceback
-            traceback.print_exc()
+            logger.debug("例外堆疊", exc_info=True)
 
     def _find_table_by_position(self, worksheet, target_row, target_col):
         """
@@ -1993,7 +1997,7 @@ class TemplateRenderer:
         try:
             from openpyxl.utils import range_boundaries
 
-            print(f"DEBUG_TABLE_MATCH: 尋找位置 ({target_row}, {target_col}) 對應的表格")
+            logger.debug(f"DEBUG_TABLE_MATCH: 尋找位置 ({target_row}, {target_col}) 對應的表格")
 
             best_match = None
             best_distance = float('inf')
@@ -2002,18 +2006,18 @@ class TemplateRenderer:
                 table = worksheet.tables[table_name]
                 min_col, min_row, max_col, max_row = range_boundaries(table.ref)
 
-                print(f"DEBUG_TABLE_MATCH: 檢查表格 {table_name} - 範圍: 行{min_row}-{max_row}, 列{min_col}-{max_col}")
+                logger.debug(f"DEBUG_TABLE_MATCH: 檢查表格 {table_name} - 範圍: 行{min_row}-{max_row}, 列{min_col}-{max_col}")
 
                 # 計算距離用於除錯
                 row_distance = abs(target_row - min_row)
                 col_distance = abs(target_col - min_col)
                 total_distance = row_distance + col_distance
-                print(f"DEBUG_TABLE_MATCH: 表格 {table_name} 距離 - 行距:{row_distance}, 列距:{col_distance}, 總距:{total_distance}")
+                logger.debug(f"DEBUG_TABLE_MATCH: 表格 {table_name} 距離 - 行距:{row_distance}, 列距:{col_distance}, 總距:{total_distance}")
 
                 # 首先檢查是否目標位置在表格範圍內（優先級最高）
                 if (min_row <= target_row <= max_row and
                     min_col <= target_col <= max_col):
-                    print(f"DEBUG_TABLE_MATCH: 目標位置在表格範圍內: {table_name}")
+                    logger.debug(f"DEBUG_TABLE_MATCH: 目標位置在表格範圍內: {table_name}")
                     return table_name
 
                 # 檢查是否在容錯範圍內
@@ -2025,23 +2029,23 @@ class TemplateRenderer:
                     adjusted_distance = total_distance
                     if target_col == min_col:
                         adjusted_distance = total_distance * 0.7  # 同列匹配30%獎勵
-                        print(f"DEBUG_TABLE_MATCH: 同列獎勵 {table_name} - 調整距離: {adjusted_distance}")
+                        logger.debug(f"DEBUG_TABLE_MATCH: 同列獎勵 {table_name} - 調整距離: {adjusted_distance}")
 
                     # 檢查是否為最佳匹配
                     if adjusted_distance < best_distance:
                         best_match = table_name
                         best_distance = adjusted_distance
-                        print(f"DEBUG_TABLE_MATCH: 更新最佳匹配: {table_name} (距離: {adjusted_distance})")
+                        logger.debug(f"DEBUG_TABLE_MATCH: 更新最佳匹配: {table_name} (距離: {adjusted_distance})")
 
             if best_match:
-                print(f"DEBUG_TABLE_MATCH: 找到最佳匹配表格: {best_match}")
+                logger.debug(f"DEBUG_TABLE_MATCH: 找到最佳匹配表格: {best_match}")
                 return best_match
 
-            print(f"DEBUG_TABLE_MATCH: 未找到匹配的表格")
+            logger.debug(f"DEBUG_TABLE_MATCH: 未找到匹配的表格")
             return None
 
         except Exception as e:
-            print(f"DEBUG_TABLE_MATCH: 位置匹配發生錯誤: {str(e)}")
+            logger.debug(f"DEBUG_TABLE_MATCH: 位置匹配發生錯誤: {str(e)}")
             return None
 
     def fix_table_ranges_post_render(self, worksheet):
@@ -2052,7 +2056,7 @@ class TemplateRenderer:
             worksheet: 工作表對象
         """
         try:
-            print(f"DEBUG_TABLE_FIX: 開始後渲染表格範圍修復")
+            logger.debug(f"DEBUG_TABLE_FIX: 開始後渲染表格範圍修復")
 
             from openpyxl.utils import range_boundaries
 
@@ -2061,7 +2065,7 @@ class TemplateRenderer:
                 current_ref = table.ref
                 min_col, min_row, max_col, max_row = range_boundaries(current_ref)
 
-                print(f"DEBUG_TABLE_FIX: 檢查表格 {table_name} - 當前範圍: {current_ref}")
+                logger.debug(f"DEBUG_TABLE_FIX: 檢查表格 {table_name} - 當前範圍: {current_ref}")
 
                 # 檢查表格範圍內是否有實際數據
                 has_data = False
@@ -2087,26 +2091,26 @@ class TemplateRenderer:
 
                     new_range = f"{self._format_cell_reference(min_row, min_col)}:{self._format_cell_reference(new_max_row, new_max_col)}"
 
-                    print(f"DEBUG_TABLE_FIX: 發現範圍需要修復: {table_name}")
-                    print(f"DEBUG_TABLE_FIX: 原範圍: {current_ref} -> 新範圍: {new_range}")
+                    logger.debug(f"DEBUG_TABLE_FIX: 發現範圍需要修復: {table_name}")
+                    logger.debug(f"DEBUG_TABLE_FIX: 原範圍: {current_ref} -> 新範圍: {new_range}")
 
                     # 推斷是否有表頭
                     header_row_value = worksheet.cell(row=min_row, column=min_col).value
                     has_header = header_row_value and isinstance(header_row_value, str) and not header_row_value.isdigit()
 
-                    print(f"DEBUG_TABLE_FIX: 推斷表頭狀態: {has_header}")
+                    logger.debug(f"DEBUG_TABLE_FIX: 推斷表頭狀態: {has_header}")
 
                     # 使用現有的同步方法更新範圍
                     self._update_table_range_sync(table, new_range, f"[修復]{table_name}", None, has_header)
 
-                    print(f"DEBUG_TABLE_FIX: 表格 {table_name} 範圍修復完成")
+                    logger.debug(f"DEBUG_TABLE_FIX: 表格 {table_name} 範圍修復完成")
                 else:
-                    print(f"DEBUG_TABLE_FIX: 表格 {table_name} 範圍正常，無需修復")
+                    logger.debug(f"DEBUG_TABLE_FIX: 表格 {table_name} 範圍正常，無需修復")
 
-            print(f"DEBUG_TABLE_FIX: 後渲染表格範圍修復完成")
+            logger.debug(f"DEBUG_TABLE_FIX: 後渲染表格範圍修復完成")
 
         except Exception as e:
-            print(f"DEBUG_TABLE_FIX: 後渲染修復失敗: {str(e)}")
+            logger.debug(f"DEBUG_TABLE_FIX: 後渲染修復失敗: {str(e)}")
             import traceback
-            traceback.print_exc()
+            logger.debug("例外堆疊", exc_info=True)
 

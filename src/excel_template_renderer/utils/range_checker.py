@@ -4,6 +4,8 @@
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 
+from openpyxl.utils import get_column_letter
+
 from ..models.container import Container
 from ..models.objects import ObjectInfo
 from ..models.base import CellPosition, DataShape
@@ -200,19 +202,14 @@ class RangeOverlapChecker:
     def _get_column_letter(self, col_num: int) -> str:
         """
         將列號轉換為Excel列字母
-        
+
         Args:
             col_num: 列號 (1-based)
-            
+
         Returns:
             str: 列字母 (如 A, B, AA, AB...)
         """
-        result = ""
-        while col_num > 0:
-            col_num -= 1
-            result = chr(65 + col_num % 26) + result
-            col_num //= 26
-        return result
+        return get_column_letter(col_num)
     
     def validate_container_ranges(self, container: Container) -> None:
         """

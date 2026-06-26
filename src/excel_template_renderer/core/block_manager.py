@@ -1,6 +1,10 @@
 """
 區塊管理器 - 實現相同sheet下的block分區渲染搬移機制
 """
+import logging
+
+logger = logging.getLogger(__name__)
+
 from typing import List, Dict, Any, Tuple
 import pandas as pd
 from copy import deepcopy
@@ -58,28 +62,28 @@ class BlockManager:
         """
         # 確認方法被調用
         import sys
-        print(f"DEBUG_CONFIRM: process_container_with_block_moving called for {container.sheet_name}", file=sys.stderr)
+        logger.debug(f"DEBUG_CONFIRM: process_container_with_block_moving called for {container.sheet_name}", file=sys.stderr)
         
         worksheet = workbook[container.sheet_name]
         
-        print(f"DEBUG: Starting container processing - {container.sheet_name} - aligned flow version")
+        logger.debug(f"DEBUG: Starting container processing - {container.sheet_name} - aligned flow version")
         
         # 第一階段：收集所有模板標籤的shape資訊
         tag_shape_info = self._collect_all_tag_shape_info(container, render_context, workbook)
-        print(f"DEBUG: 收集到 {len(tag_shape_info)} 個標籤的shape資訊")
-        print(f"DEBUG_TAG_INFO: Container {container.sheet_name} collected {len(tag_shape_info)} tags", file=sys.stderr)
+        logger.debug(f"DEBUG: 收集到 {len(tag_shape_info)} 個標籤的shape資訊")
+        logger.debug(f"DEBUG_TAG_INFO: Container {container.sheet_name} collected {len(tag_shape_info)} tags", file=sys.stderr)
         
         # 保存shape資訊供後續圖片位置更新使用
         self.shape_info_cache = tag_shape_info
-        print(f"DEBUG_CACHE: shape_info_cache saved with {len(self.shape_info_cache)} items for {container.sheet_name}", file=sys.stderr)
+        logger.debug(f"DEBUG_CACHE: shape_info_cache saved with {len(self.shape_info_cache)} items for {container.sheet_name}", file=sys.stderr)
         
         # 第二階段：依據模板標籤的渲染排序(由小到大)，處理template row複製和插入
         self._process_template_rows_by_render_order(container, worksheet, tag_shape_info, render_context)
-        print(f"DEBUG: 完成template row複製和插入")
+        logger.debug(f"DEBUG: 完成template row複製和插入")
         
         # 第三階段：執行實際的數據渲染
         self._render_all_blocks_content(container, workbook, render_context, renderer)
-        print(f"DEBUG: 完成數據渲染")
+        logger.debug(f"DEBUG: 完成數據渲染")
     
     def _collect_all_tag_shape_info(
         self, 
@@ -100,20 +104,20 @@ class BlockManager:
         tag_shape_info = {}
         
         import sys
-        print(f"DEBUG_COLLECT: Container {container.sheet_name} has {len(container.objects)} objects", file=sys.stderr)
+        logger.debug(f"DEBUG_COLLECT: Container {container.sheet_name} has {len(container.objects)} objects", file=sys.stderr)
         
         for obj in container.objects:
-            print(f"DEBUG_OBJ: Object {obj.obj_id} type: {obj.obj_type.value if hasattr(obj.obj_type, 'value') else obj.obj_type}", file=sys.stderr)
+            logger.debug(f"DEBUG_OBJ: Object {obj.obj_id} type: {obj.obj_type.value if hasattr(obj.obj_type, 'value') else obj.obj_type}", file=sys.stderr)
             if obj.obj_type in [ObjectType.TABLE, ObjectType.TABLE_OBJ]:
-                print(f"DEBUG_TABLE: Found table object {obj.obj_id}", file=sys.stderr)
+                logger.debug(f"DEBUG_TABLE: Found table object {obj.obj_id}", file=sys.stderr)
                 tag = render_context.get_tag_for_object(obj.obj_id)
-                print(f"DEBUG_TAG: Tag for {obj.obj_id}: {tag}", file=sys.stderr)
+                logger.debug(f"DEBUG_TAG: Tag for {obj.obj_id}: {tag}", file=sys.stderr)
                 if tag:
                     has_data = render_context.has_data(tag.tag_name)
-                    print(f"DEBUG_HAS_DATA: tag.tag_name={tag.tag_name}, has_data={has_data}", file=sys.stderr)
+                    logger.debug(f"DEBUG_HAS_DATA: tag.tag_name={tag.tag_name}, has_data={has_data}", file=sys.stderr)
                     if has_data:
                         data = render_context.get_data(tag.tag_name)
-                        print(f"DEBUG_DATA: Got data type={type(data)}", file=sys.stderr)
+                        logger.debug(f"DEBUG_DATA: Got data type={type(data)}", file=sys.stderr)
                         
                         if hasattr(data, 'shape'):  # DataFrame
                             data_rows = data.shape[0]
@@ -145,24 +149,24 @@ class BlockManager:
                                 'tag': tag
                             }
                             
-                            print(f"DEBUG: 標籤 {tag.tag_name} shape: {total_rows}行 x {data_cols}列")
-                            print(f"DEBUG_COLLECTED: Added {tag.tag_name} to shape_info", file=sys.stderr)
+                            logger.debug(f"DEBUG: 標籤 {tag.tag_name} shape: {total_rows}行 x {data_cols}列")
+                            logger.debug(f"DEBUG_COLLECTED: Added {tag.tag_name} to shape_info", file=sys.stderr)
                         else:
-                            print(f"DEBUG: 標籤 {tag.tag_name} 的數據不是DataFrame: {type(data)}")
+                            logger.debug(f"DEBUG: 標籤 {tag.tag_name} 的數據不是DataFrame: {type(data)}")
                 else:
                     if tag:
-                        print(f"DEBUG: 標籤 {tag.tag_name} 沒有對應的數據")
+                        logger.debug(f"DEBUG: 標籤 {tag.tag_name} 沒有對應的數據")
                     else:
-                        print(f"DEBUG: 物件 {obj.obj_id} 沒有對應的標籤")
+                        logger.debug(f"DEBUG: 物件 {obj.obj_id} 沒有對應的標籤")
             elif obj.obj_type == ObjectType.SIMPLE:
                 # 處理簡單標籤（不需要shape資訊，但要確保能被渲染）
                 tag = render_context.get_tag_for_object(obj.obj_id)
                 if tag:
-                    print(f"DEBUG: 發現簡單標籤 {tag.tag_name} 在位置 ({tag.cell_position.row}, {tag.cell_position.col})")
+                    logger.debug(f"DEBUG: 發現簡單標籤 {tag.tag_name} 在位置 ({tag.cell_position.row}, {tag.cell_position.col})")
                     if render_context.has_data(tag.tag_name):
-                        print(f"DEBUG: 簡單標籤 {tag.tag_name} 有對應數據")
+                        logger.debug(f"DEBUG: 簡單標籤 {tag.tag_name} 有對應數據")
                     else:
-                        print(f"DEBUG: 簡單標籤 {tag.tag_name} 沒有對應數據")
+                        logger.debug(f"DEBUG: 簡單標籤 {tag.tag_name} 沒有對應數據")
         
         return tag_shape_info
         
@@ -183,7 +187,7 @@ class BlockManager:
             render_context: 渲染上下文
         """
         import sys
-        print(f"DEBUG: 開始處理template rows by render order", file=sys.stderr)
+        logger.debug(f"DEBUG: 開始處理template rows by render order", file=sys.stderr)
         
         # 收集所有需要處理的標籤，按行位置排序
         tags_to_process = []
@@ -208,7 +212,7 @@ class BlockManager:
                         'additional_rows': additional_rows,
                         'data_cols': shape_info['cols']
                     })
-                    print(f"DEBUG: 標籤 {tag_name} 在第 {obj_info.cell_position.row} 行需要額外 {additional_rows} 行")
+                    logger.debug(f"DEBUG: 標籤 {tag_name} 在第 {obj_info.cell_position.row} 行需要額外 {additional_rows} 行")
         
         # 按行位置排序（從上到下處理）
         tags_to_process.sort(key=lambda x: x['row'])
@@ -224,7 +228,7 @@ class BlockManager:
             additional_rows = tag_info['additional_rows']
             data_cols = tag_info['data_cols']
             
-            print(f"DEBUG: 處理標籤 {tag_name} - 當前行: {current_row}, 需要額外行數: {additional_rows}")
+            logger.debug(f"DEBUG: 處理標籤 {tag_name} - 當前行: {current_row}, 需要額外行數: {additional_rows}")
             
             # 檢查是否是noheader條件
             is_noheader = tag.has_condition and tag.condition == "noheader"
@@ -242,9 +246,9 @@ class BlockManager:
             # 更新累計插入行數
             cumulative_inserted_rows += additional_rows
             
-            print(f"DEBUG: 標籤 {tag_name} 處理完成，累計插入行數: {cumulative_inserted_rows}")
+            logger.debug(f"DEBUG: 標籤 {tag_name} 處理完成，累計插入行數: {cumulative_inserted_rows}")
         
-        print(f"DEBUG: template rows處理完成，總共插入 {cumulative_inserted_rows} 行", file=sys.stderr)
+        logger.debug(f"DEBUG: template rows處理完成，總共插入 {cumulative_inserted_rows} 行", file=sys.stderr)
     
     def _copy_template_row_and_insert_new_rows(
         self,
@@ -266,27 +270,27 @@ class BlockManager:
             tag_end_col: 標籤結束列
             is_noheader: 是否為noheader條件
         """
-        print(f"DEBUG_MAIN_COPY: _copy_template_row_and_insert_new_rows 被呼叫，template_row={template_row}, additional_rows={additional_rows}, worksheet={worksheet.title}, is_noheader={is_noheader}")
-        print(f"DEBUG_COPY_TEMPLATE: 複製模板行 {template_row}，插入 {additional_rows} 行，noheader={is_noheader}")
-        print(f"DEBUG_COPY_TEMPLATE: 方法入口確認！！！")
+        logger.debug(f"DEBUG_MAIN_COPY: _copy_template_row_and_insert_new_rows 被呼叫，template_row={template_row}, additional_rows={additional_rows}, worksheet={worksheet.title}, is_noheader={is_noheader}")
+        logger.debug(f"DEBUG_COPY_TEMPLATE: 複製模板行 {template_row}，插入 {additional_rows} 行，noheader={is_noheader}")
+        logger.debug(f"DEBUG_COPY_TEMPLATE: 方法入口確認！！！")
 
         # 預設header保護機制：檢查noheader條件下是否會覆蓋預設header
         actual_additional_rows = additional_rows
 
         if is_noheader:
-            print(f"DEBUG_PROTECTION_ENTRY: 進入noheader保護檢查 - template_row={template_row}, additional_rows={additional_rows}")
+            logger.debug(f"DEBUG_PROTECTION_ENTRY: 進入noheader保護檢查 - template_row={template_row}, additional_rows={additional_rows}")
             # noheader條件下需要檢查是否會覆蓋下一個預設header
             protected_rows = self._check_preset_header_protection(
                 worksheet, template_row, additional_rows + 1  # +1因為要算上template_row本身
             )
             if protected_rows > 0:
                 actual_additional_rows += protected_rows
-                print(f"DEBUG: noheader模式檢測到預設header衝突，額外插入 {protected_rows} 行保護")
+                logger.debug(f"DEBUG: noheader模式檢測到預設header衝突，額外插入 {protected_rows} 行保護")
             else:
-                print(f"DEBUG: noheader模式未檢測到預設header衝突")
-            print(f"DEBUG: noheader模式，實際插入行數: {actual_additional_rows}")
+                logger.debug(f"DEBUG: noheader模式未檢測到預設header衝突")
+            logger.debug(f"DEBUG: noheader模式，實際插入行數: {actual_additional_rows}")
         else:
-            print(f"DEBUG: 有header模式，實際插入行數: {actual_additional_rows}")
+            logger.debug(f"DEBUG: 有header模式，實際插入行數: {actual_additional_rows}")
 
         if actual_additional_rows <= 0:
             return
@@ -299,7 +303,7 @@ class BlockManager:
             new_row = template_row + 1 + i
             self._copy_row_style(worksheet, template_row, new_row, tag_start_col, tag_end_col)
 
-        print(f"DEBUG: 成功插入 {actual_additional_rows} 行並複製樣式")
+        logger.debug(f"DEBUG: 成功插入 {actual_additional_rows} 行並複製樣式")
     
     def _copy_row_style(
         self, 
@@ -328,31 +332,31 @@ class BlockManager:
                 if source_cell.font:
                     target_cell.font = source_cell.font.copy()
             except Exception as e:
-                print(f"DEBUG: 複製字體樣式失敗: {e}")
+                logger.debug(f"DEBUG: 複製字體樣式失敗: {e}")
 
             try:
                 if source_cell.border:
                     target_cell.border = source_cell.border.copy()
             except Exception as e:
-                print(f"DEBUG: 複製邊框樣式失敗: {e}")
+                logger.debug(f"DEBUG: 複製邊框樣式失敗: {e}")
 
             try:
                 if source_cell.fill:
                     target_cell.fill = source_cell.fill.copy()
             except Exception as e:
-                print(f"DEBUG: 複製填充樣式失敗: {e}")
+                logger.debug(f"DEBUG: 複製填充樣式失敗: {e}")
 
             try:
                 if source_cell.alignment:
                     target_cell.alignment = source_cell.alignment.copy()
             except Exception as e:
-                print(f"DEBUG: 複製對齊樣式失敗: {e}")
+                logger.debug(f"DEBUG: 複製對齊樣式失敗: {e}")
 
             try:
                 if source_cell.number_format:
                     target_cell.number_format = source_cell.number_format
             except Exception as e:
-                print(f"DEBUG: 複製數字格式失敗: {e}")
+                logger.debug(f"DEBUG: 複製數字格式失敗: {e}")
         
     def _update_image_positions_after_rendering(
         self, 
@@ -400,7 +404,7 @@ class BlockManager:
                     obj_info = shape_info.get('obj_info')
                     if obj_info and shift_amount > 0:
                         table_row = obj_info.cell_position.row
-                        print(f"DEBUG: Using actual_additional_rows for image shift: tag {tag_name} inserted {shift_amount} rows")
+                        logger.debug(f"DEBUG: Using actual_additional_rows for image shift: tag {tag_name} inserted {shift_amount} rows")
                         
                         # 累計位移並記錄最小的表格行號
                         total_shift += shift_amount
@@ -415,7 +419,7 @@ class BlockManager:
                         if obj_info:
                             table_row = obj_info.cell_position.row
                             shift_amount = actual_rows - original_rows
-                            print(f"DEBUG: 圖片位移使用計算行數: 標籤 {tag_name} 計算插入 {shift_amount} 行")
+                            logger.debug(f"DEBUG: 圖片位移使用計算行數: 標籤 {tag_name} 計算插入 {shift_amount} 行")
                             
                             # 累計位移並記錄最小的表格行號
                             total_shift += shift_amount
@@ -424,32 +428,32 @@ class BlockManager:
         
         # 方法2：檢查Gap blocks（作為備用方案）
         if total_shift == 0:
-            print(f"DEBUG: shape_info_cache沒有位移信息，檢查gap blocks...")
-            print(f"DEBUG: container.blocks 總數: {len(container.blocks)}")
+            logger.debug(f"DEBUG: shape_info_cache沒有位移信息，檢查gap blocks...")
+            logger.debug(f"DEBUG: container.blocks 總數: {len(container.blocks)}")
             for i, block in enumerate(container.blocks):
                 try:
-                    print(f"DEBUG: Block {i}: {block.block_id} - type: {block.block_type.value} - range: {block.rng_from.row}-{block.rng_to.row}")
+                    logger.debug(f"DEBUG: Block {i}: {block.block_id} - type: {block.block_type.value} - range: {block.rng_from.row}-{block.rng_to.row}")
                 except:
                     # 避免編碼問題
-                    print(f"DEBUG: Block {i}: {block.block_id} - range: {block.rng_from.row}-{block.rng_to.row}")
+                    logger.debug(f"DEBUG: Block {i}: {block.block_id} - range: {block.rng_from.row}-{block.rng_to.row}")
             
             # 從blocks的範圍變化計算位移
             for block in container.blocks:
-                print(f"DEBUG: 檢查 block {block.block_id}, type: {block.block_type.value}")
+                logger.debug(f"DEBUG: 檢查 block {block.block_id}, type: {block.block_type.value}")
                 if block.block_type.value == 'Gap':  # 修正：使用大寫的 'Gap'
                     # Gap block的範圍擴展表示有table渲染
                     gap_size = block.rng_to.row - block.rng_from.row + 1
-                    print(f"DEBUG: Gap block {block.block_id} 範圍: {block.rng_from.row}-{block.rng_to.row}, 大小: {gap_size}")
+                    logger.debug(f"DEBUG: Gap block {block.block_id} 範圍: {block.rng_from.row}-{block.rng_to.row}, 大小: {gap_size}")
                     if gap_size > 1:  # 原來gap只有1行，現在大於1表示被擴展了
                         additional_rows = gap_size - 1
                         total_shift += additional_rows
                         if block.rng_from.row < min_table_row:
                             min_table_row = block.rng_from.row
-                        print(f"DEBUG: Gap block {block.block_id} 被擴展，產生{additional_rows}行位移")
+                        logger.debug(f"DEBUG: Gap block {block.block_id} 被擴展，產生{additional_rows}行位移")
                     else:
-                        print(f"DEBUG: Gap block {block.block_id} 沒有擴展 (大小={gap_size})")
+                        logger.debug(f"DEBUG: Gap block {block.block_id} 沒有擴展 (大小={gap_size})")
                 else:
-                    print(f"DEBUG: 跳過非Gap block: {block.block_id}")
+                    logger.debug(f"DEBUG: 跳過非Gap block: {block.block_id}")
                     
         # DEBUG: Shift calculation results
         
@@ -473,9 +477,9 @@ class BlockManager:
             # DEBUG: Worksheet._images count
             
             if worksheet_images:
-                print(f"DEBUG: 呼叫 image_manager.update_image_anchors")
+                logger.debug(f"DEBUG: 呼叫 image_manager.update_image_anchors")
                 image_manager.update_image_anchors(worksheet, worksheet_images, shift_info)
-                print(f"DEBUG: image_manager.update_image_anchors 完成")
+                logger.debug(f"DEBUG: image_manager.update_image_anchors 完成")
                 
                 # 最終驗證：直接檢查並修正錨點位置
                 # DEBUG: Final image anchor verification
@@ -493,13 +497,13 @@ class BlockManager:
                             current_to_row = anchor._to.row
                             # DEBUG: Image anchor to.row
                         
-                        print(f"DEBUG: Image {i+1} anchor verification complete")
+                        logger.debug(f"DEBUG: Image {i+1} anchor verification complete")
             else:
-                print(f"DEBUG: No worksheet images found, skipping anchor update")
+                logger.debug(f"DEBUG: No worksheet images found, skipping anchor update")
         else:
-            print("DEBUG: No images need to be shifted")
+            logger.debug("DEBUG: No images need to be shifted")
         
-        print("DEBUG: Image position update completed")
+        logger.debug("DEBUG: Image position update completed")
     
     def _calculate_new_positions(
         self, 
@@ -526,10 +530,10 @@ class BlockManager:
         block_order = {BlockType.HEADER: 1, BlockType.GAP: 2, BlockType.FOOTER: 3}
         all_blocks = sorted(container.blocks, key=lambda b: (block_order[b.block_type], b.rng_from.row))
         
-        print(f"DEBUG: 開始計算新位置，總共 {len(all_blocks)} 個blocks")
-        print(f"DEBUG: Block處理順序:")
+        logger.debug(f"DEBUG: 開始計算新位置，總共 {len(all_blocks)} 個blocks")
+        logger.debug(f"DEBUG: Block處理順序:")
         for i, block in enumerate(all_blocks):
-            print(f"DEBUG:   {i+1}. {block.block_type.value} Block {block.block_id} (原始行: {block.rng_from.row}-{block.rng_to.row})")
+            logger.debug(f"DEBUG:   {i+1}. {block.block_type.value} Block {block.block_id} (原始行: {block.rng_from.row}-{block.rng_to.row})")
         
         for block in all_blocks:
             block_shift = 0
@@ -545,7 +549,7 @@ class BlockManager:
                             info = tag_shape_info[matching_tag_name]
                             additional_rows = info['rows'] - info['original_rows']
                             block_shift += additional_rows
-                            print(f"DEBUG: Header Block中標籤 {matching_tag_name} 需要額外 {additional_rows} 行")
+                            logger.debug(f"DEBUG: Header Block中標籤 {matching_tag_name} 需要額外 {additional_rows} 行")
                 
                 # Header Block位置不變，但記錄位移
                 new_positions[block.block_id] = {
@@ -556,7 +560,7 @@ class BlockManager:
                     'requires_template_rows': block_shift > 0
                 }
                 
-                print(f"DEBUG: Header Block {block.block_id}: 位置固定 {block.rng_from.row}-{block.rng_to.row}, 但會產生 {block_shift} 行位移")
+                logger.debug(f"DEBUG: Header Block {block.block_id}: 位置固定 {block.rng_from.row}-{block.rng_to.row}, 但會產生 {block_shift} 行位移")
                 cumulative_shift += block_shift
                 
             elif block.block_type == BlockType.GAP:
@@ -569,7 +573,7 @@ class BlockManager:
                             info = tag_shape_info[matching_tag_name]
                             additional_rows = info['rows'] - info['original_rows']
                             gap_block_shift += additional_rows
-                            print(f"DEBUG: Gap Block中標籤 {matching_tag_name} 需要額外 {additional_rows} 行")
+                            logger.debug(f"DEBUG: Gap Block中標籤 {matching_tag_name} 需要額外 {additional_rows} 行")
 
                 new_start_row = block.rng_from.row + cumulative_shift
                 
@@ -589,11 +593,11 @@ class BlockManager:
                     'requires_template_rows': gap_block_shift > 0
                 }
 
-                print(f"DEBUG: Gap Block {block.block_id}: 原始 {block.rng_from.row}-{block.rng_to.row} -> 新位置 {new_start_row}-{new_end_row} (位移: {cumulative_shift}, gap_shift: {gap_block_shift})")
+                logger.debug(f"DEBUG: Gap Block {block.block_id}: 原始 {block.rng_from.row}-{block.rng_to.row} -> 新位置 {new_start_row}-{new_end_row} (位移: {cumulative_shift}, gap_shift: {gap_block_shift})")
                 
                 # Gap Block如果包含表格標籤，會產生額外位移給後續的blocks
                 cumulative_shift += gap_block_shift
-                print(f"DEBUG: Gap Block產生額外位移 {gap_block_shift}，累積位移更新為: {cumulative_shift}")
+                logger.debug(f"DEBUG: Gap Block產生額外位移 {gap_block_shift}，累積位移更新為: {cumulative_shift}")
                 
             elif block.block_type == BlockType.FOOTER:
                 # Footer Block需要搬移但不產生額外位移
@@ -603,7 +607,7 @@ class BlockManager:
                 # 特殊處理：基於合併儲存格位置來確定Footer的正確位置
                 target_shift = self._calculate_footer_shift_by_merged_cells(worksheet, block, tag_shape_info)
                 if target_shift is not None:
-                    print(f"DEBUG: Footer Block基於合併儲存格位置計算的位移: {target_shift}")
+                    logger.debug(f"DEBUG: Footer Block基於合併儲存格位置計算的位移: {target_shift}")
                     final_shift = target_shift
                 else:
                     final_shift = cumulative_shift
@@ -619,7 +623,7 @@ class BlockManager:
                     'requires_template_rows': False
                 }
                 
-                print(f"DEBUG: Footer Block {block.block_id}: 原始 {block.rng_from.row}-{block.rng_to.row} -> 修正範圍 {block.rng_from.row}-{corrected_end_row} -> 新位置 {new_start_row}-{new_end_row} (位移: {final_shift})")
+                logger.debug(f"DEBUG: Footer Block {block.block_id}: 原始 {block.rng_from.row}-{block.rng_to.row} -> 修正範圍 {block.rng_from.row}-{corrected_end_row} -> 新位置 {new_start_row}-{new_end_row} (位移: {final_shift})")
                 
                 # 同時更新Block物件的範圍以避免後續問題
                 block.rng_to.row = corrected_end_row
@@ -656,14 +660,14 @@ class BlockManager:
                     original_row = footer_block.rng_from.row
                     calculated_shift = target_row - original_row
                     
-                    print(f"DEBUG: 找到相關合併儲存格 {merged_range}，計算Footer推移距離: {original_row} -> {target_row} = {calculated_shift}")
+                    logger.debug(f"DEBUG: 找到相關合併儲存格 {merged_range}，計算Footer推移距離: {original_row} -> {target_row} = {calculated_shift}")
                     return calculated_shift
             
-            print("DEBUG: 未找到相關合併儲存格，使用預設推移計算")
+            logger.debug("DEBUG: 未找到相關合併儲存格，使用預設推移計算")
             return None
             
         except Exception as e:
-            print(f"DEBUG: 計算Footer推移距離時發生錯誤: {e}")
+            logger.debug(f"DEBUG: 計算Footer推移距離時發生錯誤: {e}")
             return None
     
     def _find_matching_tag_name(
@@ -704,7 +708,7 @@ class BlockManager:
         """
         worksheet = workbook[container.sheet_name]
 
-        print(f"DEBUG: 開始渲染容器內容: {container.sheet_name}")
+        logger.debug(f"DEBUG: 開始渲染容器內容: {container.sheet_name}")
 
         # 處理所有物件的渲染
         for obj in container.objects:
@@ -713,11 +717,11 @@ class BlockManager:
                 if tag and render_context.has_data(tag.tag_name):
                     data = render_context.get_data(tag.tag_name)
 
-                    print(f"DEBUG: 渲染標籤 {tag.tag_name} - 類型: {obj.obj_type.value if hasattr(obj.obj_type, 'value') else obj.obj_type} - 位置: ({obj.cell_position.row}, {obj.cell_position.col})")
+                    logger.debug(f"DEBUG: 渲染標籤 {tag.tag_name} - 類型: {obj.obj_type.value if hasattr(obj.obj_type, 'value') else obj.obj_type} - 位置: ({obj.cell_position.row}, {obj.cell_position.col})")
 
                     # 根據物件類型選擇合適的渲染方法
                     if obj.obj_type == ObjectType.TABLE_OBJ:
-                        print(f"DEBUG: 呼叫 render_table_tag for TABLE_OBJ: {tag.tag_name}")
+                        logger.debug(f"DEBUG: 呼叫 render_table_tag for TABLE_OBJ: {tag.tag_name}")
                         # 對於 TABLE_OBJ，使用 render_table_tag 方法，它包含位置匹配邏輯
                         try:
                             renderer.render_table_tag(
@@ -729,10 +733,10 @@ class BlockManager:
                                 start_row=obj.cell_position.row,
                                 start_col=obj.cell_position.col
                             )
-                            print(f"DEBUG: TABLE_OBJ 渲染成功: {tag.tag_name}")
+                            logger.debug(f"DEBUG: TABLE_OBJ 渲染成功: {tag.tag_name}")
                         except Exception as e:
-                            print(f"DEBUG: TABLE_OBJ 渲染失敗: {tag.tag_name}, 錯誤: {e}")
-                            print(f"DEBUG: 嘗試直接數據渲染")
+                            logger.debug(f"DEBUG: TABLE_OBJ 渲染失敗: {tag.tag_name}, 錯誤: {e}")
+                            logger.debug(f"DEBUG: 嘗試直接數據渲染")
                             # 降級到直接數據渲染
                             renderer._render_dataframe_to_cells(
                                 dataframe=data,
@@ -742,7 +746,7 @@ class BlockManager:
                                 include_header=obj.having_header and not (tag.has_condition and tag.condition == "noheader")
                             )
                     elif obj.obj_type == ObjectType.TABLE:
-                        print(f"DEBUG: 呼叫 render_table_tag for TABLE: {tag.tag_name}")
+                        logger.debug(f"DEBUG: 呼叫 render_table_tag for TABLE: {tag.tag_name}")
                         renderer.render_table_tag(
                             tag=tag,
                             dataframe=data,
@@ -753,7 +757,7 @@ class BlockManager:
                             start_col=obj.cell_position.col
                         )
                     elif obj.obj_type == ObjectType.SIMPLE:
-                        print(f"DEBUG: 呼叫 render_simple_tag for SIMPLE: {tag.tag_name}")
+                        logger.debug(f"DEBUG: 呼叫 render_simple_tag for SIMPLE: {tag.tag_name}")
                         renderer.render_simple_tag(
                             tag=tag,
                             data=data,
@@ -761,9 +765,9 @@ class BlockManager:
                             obj_info=obj
                         )
                 else:
-                    print(f"DEBUG: 跳過物件 {obj.obj_id} - 無標籤或數據")
+                    logger.debug(f"DEBUG: 跳過物件 {obj.obj_id} - 無標籤或數據")
 
-        print(f"DEBUG: 完成所有標籤渲染")
+        logger.debug(f"DEBUG: 完成所有標籤渲染")
     
     def _perform_block_moving(
         self, 
@@ -780,7 +784,7 @@ class BlockManager:
             worksheet: Excel工作表物件
             new_positions: 新位置資訊
         """
-        print("DEBUG: 開始執行Block搬移")
+        logger.debug("DEBUG: 開始執行Block搬移")
         
         # 獲取需要搬移的blocks，按照指定順序排序
         blocks_to_move = []
@@ -795,12 +799,12 @@ class BlockManager:
         ]
         
         # 詳細DEBUG輸出
-        print(f"DEBUG: 檢查Footer blocks:")
+        logger.debug(f"DEBUG: 檢查Footer blocks:")
         for block in container.blocks:
             if block.block_type == BlockType.FOOTER:
                 position_info = new_positions.get(block.block_id, {})
                 shift = position_info.get('shift', 0)
-                print(f"DEBUG:   Footer Block {block.block_id}: 在new_positions={block.block_id in new_positions}, shift={shift}")
+                logger.debug(f"DEBUG:   Footer Block {block.block_id}: 在new_positions={block.block_id in new_positions}, shift={shift}")
         
         footer_blocks.sort(key=lambda b: b.rng_from.row, reverse=True)
         blocks_to_move.extend(footer_blocks)
@@ -816,15 +820,15 @@ class BlockManager:
         gap_blocks.sort(key=lambda b: b.rng_from.row, reverse=True)
         blocks_to_move.extend(gap_blocks)
         
-        print(f"DEBUG: 需要搬移的blocks數量: {len(blocks_to_move)}")
+        logger.debug(f"DEBUG: 需要搬移的blocks數量: {len(blocks_to_move)}")
         for block in blocks_to_move:
-            print(f"DEBUG: 將搬移 {block.block_type.value} Block {block.block_id}")
+            logger.debug(f"DEBUG: 將搬移 {block.block_type.value} Block {block.block_id}")
         
         # 逐一搬移blocks
         for block in blocks_to_move:
             if block.block_id in new_positions:
                 position_info = new_positions[block.block_id]
-                print(f"DEBUG: 搬移 {block.block_type.value} block {block.block_id}, 位移 {position_info['shift']} 行")
+                logger.debug(f"DEBUG: 搬移 {block.block_type.value} block {block.block_id}, 位移 {position_info['shift']} 行")
                 self._move_block_content(
                     worksheet, 
                     block, 
@@ -839,7 +843,7 @@ class BlockManager:
                 block.rng_from.row = new_range[0]
                 block.rng_to.row = new_range[1]
                 
-                print(f"DEBUG: Block {block.block_id} 範圍更新：{original_start}-{original_end} -> {block.rng_from.row}-{block.rng_to.row}")
+                logger.debug(f"DEBUG: Block {block.block_id} 範圍更新：{original_start}-{original_end} -> {block.rng_from.row}-{block.rng_to.row}")
         
         # 處理表格標籤的template row複製
         self._handle_table_template_rows(worksheet, container, new_positions)
@@ -857,7 +861,7 @@ class BlockManager:
                     expected_end = new_range[1]
                     
                     if expected_start != original_start or expected_end != original_end:
-                        print(f"DEBUG: 更新Gap Block {block.block_id} 範圍: {original_start}-{original_end} -> {expected_start}-{expected_end}")
+                        logger.debug(f"DEBUG: 更新Gap Block {block.block_id} 範圍: {original_start}-{original_end} -> {expected_start}-{expected_end}")
                         block.rng_from.row = expected_start
                         block.rng_to.row = expected_end
     
@@ -879,18 +883,18 @@ class BlockManager:
             container: 容器物件
             new_positions: 新位置資訊
         """
-        print("DEBUG: 開始處理表格標籤的template row複製")
+        logger.debug("DEBUG: 開始處理表格標籤的template row複製")
         
         for block_id, position_info in new_positions.items():
             if position_info.get('requires_template_rows', False):
-                print(f"DEBUG: Block {block_id} 需要template rows處理")
+                logger.debug(f"DEBUG: Block {block_id} 需要template rows處理")
                 block = next((b for b in container.blocks if b.block_id == block_id), None)
                 if block:
                     block_objects = container.get_objects_by_block_id(block.block_id)
-                    print(f"DEBUG: 找到 {len(block_objects)} 個物件在 block {block_id}")
+                    logger.debug(f"DEBUG: 找到 {len(block_objects)} 個物件在 block {block_id}")
                     
                     for obj in block_objects:
-                        print(f"DEBUG: 檢查物件 {obj.obj_id}, 類型: {obj.obj_type}")
+                        logger.debug(f"DEBUG: 檢查物件 {obj.obj_id}, 類型: {obj.obj_type}")
                         if obj.obj_type in [ObjectType.TABLE, ObjectType.TABLE_OBJ]:
                             # 計算需要額外的行數
                             # 這個資訊已經在_collect_all_tag_shape_info中計算過了
@@ -901,10 +905,10 @@ class BlockManager:
                             data_rows = obj.data_shape.rows
                             additional_rows = data_rows - 1  # 減去原本的1行
                             
-                            print(f"DEBUG: 物件 {obj.obj_id} - tag_row: {tag_row}, data_rows: {data_rows}, additional_rows: {additional_rows}")
+                            logger.debug(f"DEBUG: 物件 {obj.obj_id} - tag_row: {tag_row}, data_rows: {data_rows}, additional_rows: {additional_rows}")
                             
                             if additional_rows > 0:
-                                print(f"DEBUG: 標籤 {obj.obj_id} 在第 {tag_row} 行需要額外 {additional_rows} 行")
+                                logger.debug(f"DEBUG: 標籤 {obj.obj_id} 在第 {tag_row} 行需要額外 {additional_rows} 行")
                                 self._copy_and_insert_template_rows_simple(
                                     worksheet, 
                                     tag_row, 
@@ -913,15 +917,15 @@ class BlockManager:
                                     additional_rows
                                 )
                             else:
-                                print(f"DEBUG: 物件 {obj.obj_id} 不需要額外行數")
+                                logger.debug(f"DEBUG: 物件 {obj.obj_id} 不需要額外行數")
                         else:
-                            print(f"DEBUG: 物件 {obj.obj_id} 不是表格類型，跳過")
+                            logger.debug(f"DEBUG: 物件 {obj.obj_id} 不是表格類型，跳過")
                 else:
-                    print(f"DEBUG: 找不到 block {block_id}")
+                    logger.debug(f"DEBUG: 找不到 block {block_id}")
             else:
-                print(f"DEBUG: Block {block_id} 不需要template rows處理")
+                logger.debug(f"DEBUG: Block {block_id} 不需要template rows處理")
         
-        print("DEBUG: 表格標籤template row複製處理完成")
+        logger.debug("DEBUG: 表格標籤template row複製處理完成")
     
     def _calculate_actual_block_end_row(
         self, 
@@ -950,7 +954,7 @@ class BlockManager:
                     actual_end_row = max(actual_end_row, row)
                     break
         
-        print(f"DEBUG: 基於非空白cell，實際結束行: {actual_end_row}")
+        logger.debug(f"DEBUG: 基於非空白cell，實際結束行: {actual_end_row}")
         
         # 方法2: 檢查圖片物件（如果有的話）
         try:
@@ -968,7 +972,7 @@ class BlockManager:
         if actual_end_row < block.rng_from.row:
             actual_end_row = block.rng_from.row
             
-        print(f"DEBUG: Block {block.block_id} 實際範圍: {block.rng_from.row}-{actual_end_row} (原始: {block.rng_from.row}-{block.rng_to.row})")
+        logger.debug(f"DEBUG: Block {block.block_id} 實際範圍: {block.rng_from.row}-{actual_end_row} (原始: {block.rng_from.row}-{block.rng_to.row})")
         return actual_end_row
     
     def _calculate_footer_actual_end_row(
@@ -1025,7 +1029,7 @@ class BlockManager:
         if actual_end_row < block.rng_from.row:
             actual_end_row = block.rng_from.row
             
-        print(f"DEBUG: Footer Block {block.block_id} 實際結束行: {actual_end_row} (原始: {block.rng_from.row}-{block.rng_to.row})")
+        logger.debug(f"DEBUG: Footer Block {block.block_id} 實際結束行: {actual_end_row} (原始: {block.rng_from.row}-{block.rng_to.row})")
         return actual_end_row
     
     def _copy_and_insert_template_rows_simple(
@@ -1047,9 +1051,9 @@ class BlockManager:
             tag_end_col: 標籤結束列
             additional_rows: 需要額外插入的行數
         """
-        print(f"DEBUG_SIMPLE_ENTRY: _copy_and_insert_template_rows_simple 被呼叫，template_row={template_row}, additional_rows={additional_rows}, worksheet={worksheet.title}")
-        print(f"DEBUG_SIMPLE: 複製第 {template_row} 行的樣式到後續 {additional_rows} 行")
-        print(f"DEBUG_SIMPLE: 標籤範圍: 列 {tag_start_col} 到 {tag_end_col}")
+        logger.debug(f"DEBUG_SIMPLE_ENTRY: _copy_and_insert_template_rows_simple 被呼叫，template_row={template_row}, additional_rows={additional_rows}, worksheet={worksheet.title}")
+        logger.debug(f"DEBUG_SIMPLE: 複製第 {template_row} 行的樣式到後續 {additional_rows} 行")
+        logger.debug(f"DEBUG_SIMPLE: 標籤範圍: 列 {tag_start_col} 到 {tag_end_col}")
 
         # *** 預設header保護機制 ***
         # 檢查是否會覆蓋預設header並調整插入行數
@@ -1059,28 +1063,28 @@ class BlockManager:
         )
         if protected_rows > 0:
             additional_rows += protected_rows
-            print(f"DEBUG_SIMPLE_PROTECTION: 檢測到預設header衝突，額外插入 {protected_rows} 行保護")
-            print(f"DEBUG_SIMPLE_PROTECTION: 調整插入行數: {original_additional_rows} -> {additional_rows}")
+            logger.debug(f"DEBUG_SIMPLE_PROTECTION: 檢測到預設header衝突，額外插入 {protected_rows} 行保護")
+            logger.debug(f"DEBUG_SIMPLE_PROTECTION: 調整插入行數: {original_additional_rows} -> {additional_rows}")
         else:
-            print(f"DEBUG_SIMPLE_PROTECTION: 未檢測到預設header衝突")
+            logger.debug(f"DEBUG_SIMPLE_PROTECTION: 未檢測到預設header衝突")
         
         # 1. 檢查並記錄template row上的合併儲存格，確定哪些不應該被複製
         merged_ranges_on_template_row = []
         for merged_range in worksheet.merged_cells.ranges:
             if (merged_range.min_row <= template_row and 
                 merged_range.max_row >= template_row):
-                print(f"DEBUG: 發現template row上的合併儲存格: {merged_range} (行:{merged_range.min_row}-{merged_range.max_row}, 列:{merged_range.min_col}-{merged_range.max_col})")
+                logger.debug(f"DEBUG: 發現template row上的合併儲存格: {merged_range} (行:{merged_range.min_row}-{merged_range.max_row}, 列:{merged_range.min_col}-{merged_range.max_col})")
                 # 檢查合併範圍是否跨越標籤範圍之外
                 if (merged_range.min_col < tag_start_col or 
                     merged_range.max_col > tag_end_col):
                     # 這個合併儲存格不屬於標籤範圍，可能是"路線合計"的跨欄置中
                     merged_ranges_on_template_row.append(merged_range)
-                    print(f"DEBUG: ⚠️  非標籤範圍的合併儲存格: {merged_range} (不應複製)")
+                    logger.debug(f"DEBUG: ⚠️  非標籤範圍的合併儲存格: {merged_range} (不應複製)")
                 else:
-                    print(f"DEBUG: ✅ 標籤範圍內的合併儲存格: {merged_range} (可複製)")
+                    logger.debug(f"DEBUG: ✅ 標籤範圍內的合併儲存格: {merged_range} (可複製)")
         
         if not merged_ranges_on_template_row:
-            print(f"DEBUG: 沒有發現非標籤範圍的合併儲存格")
+            logger.debug(f"DEBUG: 沒有發現非標籤範圍的合併儲存格")
         
         # 2. 收集template row的樣式和公式資訊（排除非標籤範圍的合併儲存格）
         template_row_info = {}
@@ -1112,7 +1116,7 @@ class BlockManager:
                     'number_format': 'General',
                     'is_formula': False
                 }
-                print(f"DEBUG: 第 {col} 列屬於非標籤合併儲存格，不複製樣式")
+                logger.debug(f"DEBUG: 第 {col} 列屬於非標籤合併儲存格，不複製樣式")
             else:
                 template_row_info[col] = {
                     'value': None if is_tag_cell else cell.value,  # 標籤儲存格不複製值
@@ -1182,7 +1186,7 @@ class BlockManager:
         # 計算block的實際範圍（不使用預設的1048576）
         actual_end_row = self._calculate_actual_block_end_row(worksheet, block)
         
-        print(f"DEBUG: 搬移block內容，原始範圍 {block.rng_from.row}-{block.rng_to.row}，實際範圍 {block.rng_from.row}-{actual_end_row}，位移 {shift_amount}")
+        logger.debug(f"DEBUG: 搬移block內容，原始範圍 {block.rng_from.row}-{block.rng_to.row}，實際範圍 {block.rng_from.row}-{actual_end_row}，位移 {shift_amount}")
         
         # 1. 收集block的實際範圍內容（包含合併儲存格資訊）
         block_content = self._collect_full_block_content(worksheet, block, actual_end_row)
@@ -1231,7 +1235,7 @@ class BlockManager:
         
         start_row = block.rng_from.row
         
-        print(f"DEBUG: 收集block內容，實際掃描範圍: {start_row}-{end_row} (原始範圍: {block.rng_from.row}-{block.rng_to.row})")
+        logger.debug(f"DEBUG: 收集block內容，實際掃描範圍: {start_row}-{end_row} (原始範圍: {block.rng_from.row}-{block.rng_to.row})")
         
         # 收集儲存格內容
         for row in range(start_row, end_row + 1):
@@ -1276,7 +1280,7 @@ class BlockManager:
         
         content['merged_ranges'] = merged_ranges_to_collect
         
-        print(f"DEBUG: 收集完成，找到 {len(content['cells'])} 個非空儲存格，{len(merged_ranges_to_collect)} 個合併範圍")
+        logger.debug(f"DEBUG: 收集完成，找到 {len(content['cells'])} 個非空儲存格，{len(merged_ranges_to_collect)} 個合併範圍")
         return content
     
     def _clear_range_content(
@@ -1385,7 +1389,7 @@ class BlockManager:
                         end_column=merged_info['max_col']
                     )
                 except Exception as e:
-                    print(f"DEBUG: 合併儲存格失敗: {e}")
+                    logger.debug(f"DEBUG: 合併儲存格失敗: {e}")
         
         # 恢復行高
         if original_rows:
@@ -1416,7 +1420,7 @@ class BlockManager:
         sorted_blocks = sorted(container.blocks, key=lambda b: (b.block_type.value, b.rng_from.row))
 
         for block in sorted_blocks:
-            print(f"DEBUG: 渲染 {block.block_type.value} block {block.block_id}")
+            logger.debug(f"DEBUG: 渲染 {block.block_type.value} block {block.block_id}")
             self._render_block_content_only(block, container, workbook, render_context, renderer)
 
         # 渲染完成後，更新圖片物件位置
@@ -1450,9 +1454,9 @@ class BlockManager:
         
         for obj in sorted_objects:
             tag = render_context.get_tag_for_object(obj.obj_id)
-            print(f"DEBUG: 檢查物件 {obj.obj_id} (位置: {obj.cell_position.row},{obj.cell_position.col})")
+            logger.debug(f"DEBUG: 檢查物件 {obj.obj_id} (位置: {obj.cell_position.row},{obj.cell_position.col})")
             if not tag:
-                print(f"DEBUG: 物件 {obj.obj_id} 沒有對應的標籤")
+                logger.debug(f"DEBUG: 物件 {obj.obj_id} 沒有對應的標籤")
                 continue
             
             # 重要修正：為每個物件創建獨立的標籤副本，避免共享標籤對象
@@ -1462,25 +1466,25 @@ class BlockManager:
             tag_copy.cell_position = obj.cell_position
             tag = tag_copy
             
-            print(f"DEBUG: 找到標籤 {tag.tag_name} (位置: {tag.cell_position.row},{tag.cell_position.col})")
+            logger.debug(f"DEBUG: 找到標籤 {tag.tag_name} (位置: {tag.cell_position.row},{tag.cell_position.col})")
             if not render_context.has_data(tag.tag_name):
-                print(f"DEBUG: 標籤 {tag.tag_name} 沒有對應數據")
+                logger.debug(f"DEBUG: 標籤 {tag.tag_name} 沒有對應數據")
                 continue
             
-            print(f"DEBUG: 開始渲染標籤 {tag.tag_name} 在位置 ({obj.cell_position.row},{obj.cell_position.col})")
+            logger.debug(f"DEBUG: 開始渲染標籤 {tag.tag_name} 在位置 ({obj.cell_position.row},{obj.cell_position.col})")
             data = render_context.get_data(tag.tag_name)
             
             if obj.obj_type == ObjectType.SIMPLE:
                 # 簡單標籤渲染
                 renderer.render_simple_tag(tag, data, workbook, worksheet)
-                print(f"DEBUG: 完成簡單標籤 {tag.tag_name} 在位置 ({obj.cell_position.row},{obj.cell_position.col}) 渲染")
+                logger.debug(f"DEBUG: 完成簡單標籤 {tag.tag_name} 在位置 ({obj.cell_position.row},{obj.cell_position.col}) 渲染")
                 
             elif obj.obj_type in [ObjectType.TABLE, ObjectType.TABLE_OBJ]:
                 # 表格標籤渲染：直接渲染數據（template rows已在前面階段處理）
                 if isinstance(data, pd.DataFrame):
-                    print(f"DEBUG: 直接渲染表格數據，跳過template row處理")
+                    logger.debug(f"DEBUG: 直接渲染表格數據，跳過template row處理")
                     renderer.render_table_tag(tag, data, workbook, worksheet, obj)
-                    print(f"DEBUG: 完成表格標籤 {tag.tag_name} 渲染")
+                    logger.debug(f"DEBUG: 完成表格標籤 {tag.tag_name} 渲染")
     
     def _prepare_table_template_rows(
         self, 
@@ -1514,12 +1518,12 @@ class BlockManager:
             # 有header的情況：使用數據行數作為總需求，不額外加header行
             # 這樣可確保與noheader情況佔用相同空間
             total_rows_needed = data_rows_needed
-            print(f"DEBUG: 有header情況調整為與noheader相同空間: {total_rows_needed} 行")
+            logger.debug(f"DEBUG: 有header情況調整為與noheader相同空間: {total_rows_needed} 行")
         else:
             # noheader情況：按原邏輯
             total_rows_needed = data_rows_needed + header_rows
         
-        print(f"DEBUG: 準備表格template rows: 需要 {total_rows_needed} 行 (數據: {data_rows_needed}, 標題: {header_rows})")
+        logger.debug(f"DEBUG: 準備表格template rows: 需要 {total_rows_needed} 行 (數據: {data_rows_needed}, 標題: {header_rows})")
         
         # 複製標籤所在行的樣式和公式
         if total_rows_needed > 1:
@@ -1540,7 +1544,7 @@ class BlockManager:
             template_row: 模板行
             additional_rows: 需要複製的額外行數
         """
-        print(f"DEBUG: 複製第 {template_row} 行的樣式到後續 {additional_rows} 行")
+        logger.debug(f"DEBUG: 複製第 {template_row} 行的樣式到後續 {additional_rows} 行")
         
         # 收集模板行的樣式和公式
         template_info = []
@@ -1841,7 +1845,7 @@ class BlockManager:
                     'max_col': merged_range.max_col,
                     'range_string': str(merged_range)
                 })
-                print(f"DEBUG: 收集Block合併儲存格: {merged_range}")
+                logger.debug(f"DEBUG: 收集Block合併儲存格: {merged_range}")
         
         return content
     
@@ -1886,9 +1890,9 @@ class BlockManager:
             
             try:
                 worksheet.merge_cells(new_range)
-                print(f"DEBUG: 重建Block合併儲存格: {merge_info['range_string']} -> {new_range}")
+                logger.debug(f"DEBUG: 重建Block合併儲存格: {merge_info['range_string']} -> {new_range}")
             except Exception as e:
-                print(f"DEBUG: 重建合併儲存格失敗: {e}")
+                logger.debug(f"DEBUG: 重建合併儲存格失敗: {e}")
     
     def _clear_range_content(
         self, 
@@ -1914,7 +1918,7 @@ class BlockManager:
         for merged_range in ranges_to_unmerge:
             try:
                 worksheet.unmerge_cells(str(merged_range))
-                print(f"DEBUG: 清除Block合併儲存格: {merged_range}")
+                logger.debug(f"DEBUG: 清除Block合併儲存格: {merged_range}")
             except:
                 pass
         
@@ -1942,10 +1946,10 @@ class BlockManager:
             shift_rows: 要推移的行數
         """
         if shift_rows <= 0:
-            print(f"DEBUG: Block {block.block_id} 不需要推移（shift_rows={shift_rows}）")
+            logger.debug(f"DEBUG: Block {block.block_id} 不需要推移（shift_rows={shift_rows}）")
             return
             
-        print(f"DEBUG: 開始搬移 {block.block_type.value} Block {block.block_id}，推移 {shift_rows} 行")
+        logger.debug(f"DEBUG: 開始搬移 {block.block_type.value} Block {block.block_id}，推移 {shift_rows} 行")
         
         # 計算實際的結束行
         if block.block_type == BlockType.FOOTER:
@@ -1965,7 +1969,7 @@ class BlockManager:
         # 將內容貼到新位置
         self._paste_full_block_content(worksheet, content, new_start_row)
         
-        print(f"DEBUG: Block {block.block_id} 搬移完成，從第{block.rng_from.row}行搬移到第{new_start_row}行")
+        logger.debug(f"DEBUG: Block {block.block_id} 搬移完成，從第{block.rng_from.row}行搬移到第{new_start_row}行")
 
     # 保持現有方法的兼容性
     def process_header_block(
@@ -2063,7 +2067,7 @@ class BlockManager:
             tag_shape_info: 標籤shape資訊
             render_context: 渲染上下文
         """
-        print("DEBUG: 開始依據渲染排序處理template row複製和插入")
+        logger.debug("DEBUG: 開始依據渲染排序處理template row複製和插入")
         
         # 收集所有table、table_obj的標籤，並按照渲染排序(由小到大，即row位置由上到下)
         table_tags = []
@@ -2121,42 +2125,42 @@ class BlockManager:
                         original_gap = curr_table_start_row - prev_end_row - 1
                         tag_info['original_gap'] = max(0, original_gap)
 
-                        print(f"DEBUG: 標籤 {tag_info['tag'].tag_name} gap計算: 前表格結束{prev_end_row} -> 當前表格開始{curr_table_start_row} = gap {original_gap}行")
+                        logger.debug(f"DEBUG: 標籤 {tag_info['tag'].tag_name} gap計算: 前表格結束{prev_end_row} -> 當前表格開始{curr_table_start_row} = gap {original_gap}行")
 
                 # 反轉順序（由大到小，從下到上）用於處理
                 group.reverse()
                 result.extend(group)
-                print(f"DEBUG: 列 {col} 包含 {len(group)} 個標籤")
+                logger.debug(f"DEBUG: 列 {col} 包含 {len(group)} 個標籤")
                 for tag_info in group:
-                    print(f"DEBUG:   列 {col} 標籤 {tag_info['tag'].tag_name} 在第 {tag_info['row_position']} 行")
+                    logger.debug(f"DEBUG:   列 {col} 標籤 {tag_info['tag'].tag_name} 在第 {tag_info['row_position']} 行")
 
             return result
 
         # 使用新的分組排序邏輯
         table_tags = group_by_columns_then_sort(table_tags)
 
-        print(f"DEBUG: 找到 {len(table_tags)} 個需要處理的table標籤")
+        logger.debug(f"DEBUG: 找到 {len(table_tags)} 個需要處理的table標籤")
         for tag_info in table_tags:
-            print(f"DEBUG:   標籤 {tag_info['tag'].tag_name} 在第 {tag_info['row_position']} 行")
+            logger.debug(f"DEBUG:   標籤 {tag_info['tag'].tag_name} 在第 {tag_info['row_position']} 行")
 
         # 重要：將計算的gap信息轉移到objects中，供後續渲染時使用
-        print("DEBUG: 轉移gap信息到objects中")
+        logger.debug("DEBUG: 轉移gap信息到objects中")
         for tag_info in table_tags:
             obj = tag_info['obj']
             original_gap = tag_info.get('original_gap', 0)
             # 將gap信息儲存到object的自定義屬性中
             setattr(obj, '_temp_gap', original_gap)
-            print(f"DEBUG: 標籤 {tag_info['tag'].tag_name} 的gap信息已轉移: {original_gap} 行")
+            logger.debug(f"DEBUG: 標籤 {tag_info['tag'].tag_name} 的gap信息已轉移: {original_gap} 行")
 
         # 重要：在開始處理前，先清除所有原始標籤位置，避免模板複製時殘留標籤
-        print("DEBUG: 預先清除所有原始標籤位置，避免模板複製時產生殘留內容")
+        logger.debug("DEBUG: 預先清除所有原始標籤位置，避免模板複製時產生殘留內容")
         self._clear_original_tag_positions(worksheet, table_tags)
         
         # 修正：維護按列分組的累積位移量字典，避免水平方向表格互相影響
         # 格式：{column: {row: shift_amount}}
         column_cumulative_shifts = {}
         
-        print("DEBUG: 開始從下往上處理template row複製和插入（避免位置互相影響）")
+        logger.debug("DEBUG: 開始從下往上處理template row複製和插入（避免位置互相影響）")
         
         for tag_info in table_tags:
             tag = tag_info['tag']
@@ -2181,20 +2185,20 @@ class BlockManager:
             # 將gap信息保存到shape_info中，供後續渲染時使用
             shape_info['original_gap'] = original_gap
             
-            print(f"DEBUG: 處理標籤 {tag.tag_name}:")
-            print(f"DEBUG:   當前template_row: {template_row}")
-            print(f"DEBUG:   初始記錄位置: {tag_info['row_position']}")
-            print(f"DEBUG:   total_rows_needed: {total_rows_needed}")
-            print(f"DEBUG:   original_rows: {original_rows}")
-            print(f"DEBUG:   additional_rows: {additional_rows} (僅數據行)")
-            print(f"DEBUG:   original_gap: {original_gap} (將在渲染時處理)")
+            logger.debug(f"DEBUG: 處理標籤 {tag.tag_name}:")
+            logger.debug(f"DEBUG:   當前template_row: {template_row}")
+            logger.debug(f"DEBUG:   初始記錄位置: {tag_info['row_position']}")
+            logger.debug(f"DEBUG:   total_rows_needed: {total_rows_needed}")
+            logger.debug(f"DEBUG:   original_rows: {original_rows}")
+            logger.debug(f"DEBUG:   additional_rows: {additional_rows} (僅數據行)")
+            logger.debug(f"DEBUG:   original_gap: {original_gap} (將在渲染時處理)")
 
             if additional_rows > 0:
-                print(f"DEBUG: 標籤 {tag.tag_name} 需要插入 {additional_rows} 行數據行，gap在渲染時處理")
+                logger.debug(f"DEBUG: 標籤 {tag.tag_name} 需要插入 {additional_rows} 行數據行，gap在渲染時處理")
 
                 # 檢查是否為noheader條件
                 is_noheader = tag.has_condition and tag.condition == "noheader"
-                print(f"DEBUG: 標籤 {tag.tag_name} noheader條件: {is_noheader}")
+                logger.debug(f"DEBUG: 標籤 {tag.tag_name} noheader條件: {is_noheader}")
 
                 # 複製模板行的樣式和公式，並插入新行（僅數據行）
                 self._copy_template_row_and_insert_new_rows(
@@ -2210,7 +2214,7 @@ class BlockManager:
                 if col not in column_cumulative_shifts:
                     column_cumulative_shifts[col] = {}
                 column_cumulative_shifts[col][template_row] = additional_rows
-                print(f"DEBUG: 記錄列 {col} 行 {template_row} 的累積位移: {additional_rows}")
+                logger.debug(f"DEBUG: 記錄列 {col} 行 {template_row} 的累積位移: {additional_rows}")
 
                 # 修正：只更新同一列中位於此標籤下方的標籤和物件的位置
                 # 避免水平方向不同列的表格互相影響位置
@@ -2229,11 +2233,11 @@ class BlockManager:
                 obj.data_shape.rows = total_rows_needed
                 obj.data_shape.cols = shape_info['cols']
                 
-                print(f"DEBUG: 標籤 {tag.tag_name} 處理完成，插入了 {additional_rows} 行數據行，gap:{original_gap}行將在渲染時處理")
+                logger.debug(f"DEBUG: 標籤 {tag.tag_name} 處理完成，插入了 {additional_rows} 行數據行，gap:{original_gap}行將在渲染時處理")
             else:
-                print(f"DEBUG: 標籤 {tag.tag_name} 不需要插入額外行數，gap:{original_gap}行將在渲染時處理")
+                logger.debug(f"DEBUG: 標籤 {tag.tag_name} 不需要插入額外行數，gap:{original_gap}行將在渲染時處理")
         
-        print("DEBUG: template row複製和插入處理完成")
+        logger.debug("DEBUG: template row複製和插入處理完成")
         
         # 重要：更新所有Gap blocks的範圍以包含插入的行
         self._update_gap_block_ranges_after_insertions(container, tag_shape_info)
@@ -2250,7 +2254,7 @@ class BlockManager:
             worksheet: Excel工作表
             table_tags: 表格標籤信息列表
         """
-        print("DEBUG_CLEAR_ORIGINAL: 開始清除所有原始標籤位置和相關區域")
+        logger.debug("DEBUG_CLEAR_ORIGINAL: 開始清除所有原始標籤位置和相關區域")
 
         cleared_positions = set()  # 避免重複清除同一位置
 
@@ -2266,18 +2270,18 @@ class BlockManager:
                 try:
                     original_cell = worksheet.cell(row=original_row, column=original_col)
                     if original_cell.value:
-                        print(f"DEBUG_CLEAR_ORIGINAL: 清除原始標籤位置 ({original_row}, {original_col}): {original_cell.value}")
+                        logger.debug(f"DEBUG_CLEAR_ORIGINAL: 清除原始標籤位置 ({original_row}, {original_col}): {original_cell.value}")
                         original_cell.value = None
                         cleared_positions.add(position_key)
                 except Exception as e:
-                    print(f"DEBUG_CLEAR_ORIGINAL: 清除標籤位置錯誤: {e}")
+                    logger.debug(f"DEBUG_CLEAR_ORIGINAL: 清除標籤位置錯誤: {e}")
 
             # 擴展清除：清除標籤所在表格物件的所有位置，避免殘留
             # 表格物件起始位置 = 標籤位置 - 1
             table_start_row = max(1, original_row - 1)
             table_end_row = original_row
 
-            print(f"DEBUG_CLEAR_ORIGINAL: 清除表格區域 行{table_start_row}-{table_end_row}, 列{original_col}-{original_col+5}")
+            logger.debug(f"DEBUG_CLEAR_ORIGINAL: 清除表格區域 行{table_start_row}-{table_end_row}, 列{original_col}-{original_col+5}")
 
             # 清除表格區域（擴展到可能的列範圍）
             for row in range(table_start_row, table_end_row + 1):
@@ -2287,12 +2291,12 @@ class BlockManager:
                         if cell.value and (str(cell.value).startswith('#{{') or
                                          str(cell.value).startswith('欄') or
                                          '欄' in str(cell.value)):
-                            print(f"DEBUG_CLEAR_ORIGINAL: 清除殘留內容 ({row}, {col}): {cell.value}")
+                            logger.debug(f"DEBUG_CLEAR_ORIGINAL: 清除殘留內容 ({row}, {col}): {cell.value}")
                             cell.value = None
                     except Exception as e:
                         continue
 
-        print(f"DEBUG_CLEAR_ORIGINAL: 完成清除，總共處理了 {len(cleared_positions)} 個標籤位置")
+        logger.debug(f"DEBUG_CLEAR_ORIGINAL: 完成清除，總共處理了 {len(cleared_positions)} 個標籤位置")
 
     def _update_positions_after_row_insertion(
         self,
@@ -2318,9 +2322,9 @@ class BlockManager:
             current_tag_info: 當前標籤信息，包含原始間距
         """
         if target_column is not None:
-            print(f"DEBUG: 更新插入行 {insert_row} 之後的位置，插入了 {additional_rows} 行，只影響列 {target_column}")
+            logger.debug(f"DEBUG: 更新插入行 {insert_row} 之後的位置，插入了 {additional_rows} 行，只影響列 {target_column}")
         else:
-            print(f"DEBUG: 更新插入行 {insert_row} 之後的位置，插入了 {additional_rows} 行（所有列）")
+            logger.debug(f"DEBUG: 更新插入行 {insert_row} 之後的位置，插入了 {additional_rows} 行（所有列）")
 
         # 更新容器中所有物件的位置
         for obj in container.objects:
@@ -2336,7 +2340,7 @@ class BlockManager:
                 # 需要向下移動
                 old_row = obj.cell_position.row
                 obj.cell_position.row += additional_rows
-                print(f"DEBUG: 更新物件 {obj.obj_id} 位置: 行 {old_row} -> {obj.cell_position.row}")
+                logger.debug(f"DEBUG: 更新物件 {obj.obj_id} 位置: 行 {old_row} -> {obj.cell_position.row}")
 
                 # 同時更新對應的標籤位置
                 tag = render_context.get_tag_for_object(obj.obj_id)
@@ -2349,9 +2353,9 @@ class BlockManager:
                     if old_tag_row > insert_row:
                         tag_copy.cell_position.row = old_tag_row + additional_rows
                         render_context.tag_mapping[obj.obj_id] = tag_copy
-                        print(f"DEBUG: 更新標籤 {tag.tag_name} 位置: 行 {old_tag_row} -> {tag_copy.cell_position.row}")
+                        logger.debug(f"DEBUG: 更新標籤 {tag.tag_name} 位置: 行 {old_tag_row} -> {tag_copy.cell_position.row}")
                     else:
-                        print(f"DEBUG: 標籤 {tag.tag_name} 位置 {old_tag_row} 不需要更新（位於插入點之前）")
+                        logger.debug(f"DEBUG: 標籤 {tag.tag_name} 位置 {old_tag_row} 不需要更新（位於插入點之前）")
         
         # 更新table_tags列表中的row_position（用於後續處理）
         for tag_info in table_tags:
@@ -2362,10 +2366,10 @@ class BlockManager:
             if tag_info['row_position'] > insert_row:
                 old_pos = tag_info['row_position']
                 tag_info['row_position'] += additional_rows
-                print(f"DEBUG: 更新table_tags中 {tag_info['tag'].tag_name} 的記錄位置: {old_pos} -> {tag_info['row_position']}")
+                logger.debug(f"DEBUG: 更新table_tags中 {tag_info['tag'].tag_name} 的記錄位置: {old_pos} -> {tag_info['row_position']}")
         
         # 重要：位置更新後，需要重新分配物件到正確的Block中
-        print(f"DEBUG: 位置更新完成，開始重新分配物件到正確的Block")
+        logger.debug(f"DEBUG: 位置更新完成，開始重新分配物件到正確的Block")
         self._reassign_objects_to_correct_blocks(container)
     
     def _update_gap_block_ranges_after_insertions(
@@ -2380,7 +2384,7 @@ class BlockManager:
             container: 容器物件
             tag_shape_info: 標籤shape資訊
         """
-        print("DEBUG: 開始更新Gap blocks範圍以包含插入的行")
+        logger.debug("DEBUG: 開始更新Gap blocks範圍以包含插入的行")
         
         # 計算每個Gap block中標籤插入的總行數
         for block in container.blocks:
@@ -2401,20 +2405,20 @@ class BlockManager:
                             # 優先使用實際插入的行數（已考慮header條件調整）
                             if 'actual_additional_rows' in tag_shape_info[matching_tag_name]:
                                 additional_rows = tag_shape_info[matching_tag_name]['actual_additional_rows']
-                                print(f"DEBUG: Gap Block {block.block_id} 中的標籤 {matching_tag_name} 使用實際插入行數: {additional_rows} 行")
+                                logger.debug(f"DEBUG: Gap Block {block.block_id} 中的標籤 {matching_tag_name} 使用實際插入行數: {additional_rows} 行")
                             else:
                                 # 回退到原始計算方式（用於向後相容）
                                 additional_rows = tag_shape_info[matching_tag_name]['rows'] - tag_shape_info[matching_tag_name]['original_rows']
-                                print(f"DEBUG: Gap Block {block.block_id} 中的標籤 {matching_tag_name} 使用計算行數: {additional_rows} 行")
+                                logger.debug(f"DEBUG: Gap Block {block.block_id} 中的標籤 {matching_tag_name} 使用計算行數: {additional_rows} 行")
                             gap_block_expansion += additional_rows
                 
                 if gap_block_expansion > 0:
                     original_end = block.rng_to.row
                     new_end = original_end + gap_block_expansion
-                    print(f"DEBUG: 更新Gap Block {block.block_id} 範圍: {block.rng_from.row}-{original_end} -> {block.rng_from.row}-{new_end}")
+                    logger.debug(f"DEBUG: 更新Gap Block {block.block_id} 範圍: {block.rng_from.row}-{original_end} -> {block.rng_from.row}-{new_end}")
                     block.rng_to.row = new_end
                 else:
-                    print(f"DEBUG: Gap Block {block.block_id} 不需要擴展範圍")
+                    logger.debug(f"DEBUG: Gap Block {block.block_id} 不需要擴展範圍")
 
     def _update_gap_blocks_range_for_insertions(
         self, 
@@ -2433,7 +2437,7 @@ class BlockManager:
             inserted_after_row: 插入位置的行號
             inserted_rows: 插入的行數
         """
-        print(f"DEBUG: 更新Gap blocks範圍，插入位置：第{inserted_after_row}行後，插入{inserted_rows}行")
+        logger.debug(f"DEBUG: 更新Gap blocks範圍，插入位置：第{inserted_after_row}行後，插入{inserted_rows}行")
         
         # 首先推移所有在插入位置之後的Block
         for block in container.blocks:
@@ -2442,7 +2446,7 @@ class BlockManager:
                 old_end = block.rng_to.row
                 block.rng_from.row += inserted_rows
                 block.rng_to.row += inserted_rows
-                print(f"DEBUG: Block {block.block_id} 位置推移: {old_start}-{old_end} -> {block.rng_from.row}-{block.rng_to.row}")
+                logger.debug(f"DEBUG: Block {block.block_id} 位置推移: {old_start}-{old_end} -> {block.rng_from.row}-{block.rng_to.row}")
         
         # 然後處理包含插入位置的Gap block，擴展其範圍
         for block in container.blocks:
@@ -2452,7 +2456,7 @@ class BlockManager:
                     old_end = block.rng_to.row - inserted_rows  # 回復推移前的結束位置進行比較
                     if inserted_after_row <= old_end:  # 確認包含插入位置
                         block.rng_to.row = block.rng_to.row + inserted_rows  # 在已推移的基礎上再擴展
-                        print(f"DEBUG: Gap Block {block.block_id} 包含插入位置，範圍擴展到: {block.rng_from.row}-{block.rng_to.row}")
+                        logger.debug(f"DEBUG: Gap Block {block.block_id} 包含插入位置，範圍擴展到: {block.rng_from.row}-{block.rng_to.row}")
                     
         # 最後，修正Block間的間隙
         self._fix_block_gaps(container)
@@ -2475,18 +2479,18 @@ class BlockManager:
             if current_block.rng_to.row + 1 < next_block.rng_from.row:
                 gap_start = current_block.rng_to.row + 1
                 gap_end = next_block.rng_from.row - 1
-                print(f"DEBUG: 發現Block間隙：第{gap_start}到{gap_end}行在{current_block.block_id}和{next_block.block_id}之間")
+                logger.debug(f"DEBUG: 發現Block間隙：第{gap_start}到{gap_end}行在{current_block.block_id}和{next_block.block_id}之間")
                 
                 # 將間隙併入前一個Block（如果是Gap類型）或後一個Block
                 if current_block.block_type == BlockType.GAP:
-                    print(f"DEBUG: 將間隙併入前面的Gap Block {current_block.block_id}")
+                    logger.debug(f"DEBUG: 將間隙併入前面的Gap Block {current_block.block_id}")
                     current_block.rng_to.row = next_block.rng_from.row - 1
                 elif next_block.block_type == BlockType.GAP:
-                    print(f"DEBUG: 將間隙併入後面的Gap Block {next_block.block_id}")
+                    logger.debug(f"DEBUG: 將間隙併入後面的Gap Block {next_block.block_id}")
                     next_block.rng_from.row = current_block.rng_to.row + 1
                 else:
                     # 兩邊都不是Gap，擴展前一個Block
-                    print(f"DEBUG: 將間隙併入前面的Block {current_block.block_id}")
+                    logger.debug(f"DEBUG: 將間隙併入前面的Block {current_block.block_id}")
                     current_block.rng_to.row = next_block.rng_from.row - 1
 
     def _copy_template_row_and_insert_new_rows(
@@ -2513,7 +2517,7 @@ class BlockManager:
         try:
             from openpyxl.cell.cell import MergedCell
             
-            # print(f"DEBUG: 在第 {template_row} 行後插入 {additional_rows} 行")
+            # logger.debug(f"DEBUG: 在第 {template_row} 行後插入 {additional_rows} 行")
             
             # 1. 先收集插入位置下方的合併儲存格，準備推移
             merged_ranges_to_shift = []
@@ -2529,23 +2533,23 @@ class BlockManager:
                     })
                     # 先移除原有的合併儲存格
                     worksheet.unmerge_cells(str(merged_range))
-                    print(f"DEBUG: 暫時移除合併儲存格: {merged_range}")
+                    logger.debug(f"DEBUG: 暫時移除合併儲存格: {merged_range}")
             
             # *** 預設header保護機制 ***
             # 檢查是否會覆蓋預設header並調整插入行數（noheader條件下跳過保護）
             original_additional_rows = additional_rows
             if is_noheader:
-                print(f"DEBUG_METHOD2_PROTECTION: noheader條件，跳過預設header保護機制")
+                logger.debug(f"DEBUG_METHOD2_PROTECTION: noheader條件，跳過預設header保護機制")
             else:
                 protection_rows = self._check_preset_header_protection_for_method2(
                     worksheet, template_row, additional_rows
                 )
                 if protection_rows > 0:
                     additional_rows += protection_rows
-                    print(f"DEBUG_METHOD2_PROTECTION: 檢測到預設header衝突，額外插入 {protection_rows} 行保護")
-                    print(f"DEBUG_METHOD2_PROTECTION: 調整插入行數: {original_additional_rows} -> {additional_rows}")
+                    logger.debug(f"DEBUG_METHOD2_PROTECTION: 檢測到預設header衝突，額外插入 {protection_rows} 行保護")
+                    logger.debug(f"DEBUG_METHOD2_PROTECTION: 調整插入行數: {original_additional_rows} -> {additional_rows}")
                 else:
-                    print(f"DEBUG_METHOD2_PROTECTION: 未檢測到預設header衝突")
+                    logger.debug(f"DEBUG_METHOD2_PROTECTION: 未檢測到預設header衝突")
 
             # 2. 插入所需的新行數（一次性插入，從template_row+1開始）
             worksheet.insert_rows(template_row + 1, additional_rows)
@@ -2556,13 +2560,13 @@ class BlockManager:
                 new_max_row = merge_info['max_row'] + additional_rows
                 new_range = f"{worksheet.cell(row=new_min_row, column=merge_info['min_col']).coordinate}:{worksheet.cell(row=new_max_row, column=merge_info['max_col']).coordinate}"
                 worksheet.merge_cells(new_range)
-                print(f"DEBUG: 重新創建推移後的合併儲存格: {merge_info['original_range']} -> {new_range}")
+                logger.debug(f"DEBUG: 重新創建推移後的合併儲存格: {merge_info['original_range']} -> {new_range}")
             
             # 複製template row的樣式和公式到新插入的行
             for copy_index in range(additional_rows):
                 target_row = template_row + 1 + copy_index
                 
-                print(f"DEBUG: 複製第 {template_row} 行到第 {target_row} 行")
+                logger.debug(f"DEBUG: 複製第 {template_row} 行到第 {target_row} 行")
                 
                 # 複製template row的內容到新插入的行
                 for col in range(1, worksheet.max_column + 1):
@@ -2601,7 +2605,7 @@ class BlockManager:
             self._copy_merged_cells_to_new_rows(worksheet, template_row, template_row + 1, additional_rows)
                         
         except Exception as e:
-            print(f"ERROR: 複製template row失敗: {str(e)}")
+            logger.error(f"ERROR: 複製template row失敗: {str(e)}")
             raise RenderError(f"複製template row失敗: {str(e)}")
 
     def _copy_cell_style(self, source_cell, target_cell):
@@ -2659,7 +2663,7 @@ class BlockManager:
                     pass
                 
         except Exception as e:
-            print(f"DEBUG: 樣式複製失敗: {str(e)}")
+            logger.debug(f"DEBUG: 樣式複製失敗: {str(e)}")
             # 至少複製數字格式
             try:
                 if source_cell.number_format:
@@ -2691,7 +2695,7 @@ class BlockManager:
                 if merged_range.min_row == merged_range.max_row == template_row:
                     # 只複製單行且確實屬於模板行的合併儲存格
                     merged_ranges_to_copy.append(merged_range)
-                    print(f"DEBUG: 找到模板行 {template_row} 的合併儲存格: {merged_range}")
+                    logger.debug(f"DEBUG: 找到模板行 {template_row} 的合併儲存格: {merged_range}")
             
             # 為每個新行創建對應的合併範圍
             for i in range(num_rows):
@@ -2700,7 +2704,7 @@ class BlockManager:
                     # 計算新的合併範圍
                     new_range = f"{worksheet.cell(row=target_row, column=merged_range.min_col).coordinate}:{worksheet.cell(row=target_row, column=merged_range.max_col).coordinate}"
                     worksheet.merge_cells(new_range)
-                    print(f"DEBUG: 創建數據行合併儲存格: {new_range}")
+                    logger.debug(f"DEBUG: 創建數據行合併儲存格: {new_range}")
                     
                     # 複製合併儲存格的樣式到所有儲存格
                     # 特別注意：合併後的儲存格只有左上角儲存格可以設定值和樣式
@@ -2709,7 +2713,7 @@ class BlockManager:
                     self._copy_cell_style(source_cell, target_cell)
             
         except Exception as e:
-            print(f"DEBUG: 複製合併儲存格失敗: {str(e)}")
+            logger.debug(f"DEBUG: 複製合併儲存格失敗: {str(e)}")
 
     def _reassign_objects_to_correct_blocks(self, container: Container) -> None:
         """
@@ -2721,12 +2725,12 @@ class BlockManager:
         Args:
             container: 容器物件
         """
-        print(f"DEBUG: 開始重新分配物件到正確的Block中")
+        logger.debug(f"DEBUG: 開始重新分配物件到正確的Block中")
         
         # 先輸出所有Block的範圍
-        print(f"DEBUG: 容器的Block範圍:")
+        logger.debug(f"DEBUG: 容器的Block範圍:")
         for i, block in enumerate(container.blocks):
-            print(f"DEBUG:   {i+1}. {block.block_type.value} Block {block.block_id}: 第{block.rng_from.row}-{block.rng_to.row}行")
+            logger.debug(f"DEBUG:   {i+1}. {block.block_type.value} Block {block.block_id}: 第{block.rng_from.row}-{block.rng_to.row}行")
         
         # 收集所有需要重新分配的物件
         reassignment_needed = []
@@ -2735,7 +2739,7 @@ class BlockManager:
             current_row = obj.cell_position.row
             current_block_id = obj.block_id
             
-            print(f"DEBUG: 檢查物件 {obj.obj_id} (位置: {current_row}, Block: {current_block_id})")
+            logger.debug(f"DEBUG: 檢查物件 {obj.obj_id} (位置: {current_row}, Block: {current_block_id})")
             
             # 找到該物件應該屬於的正確Block
             correct_block = None
@@ -2745,9 +2749,9 @@ class BlockManager:
                     break
             
             if correct_block:
-                print(f"DEBUG: 物件 {obj.obj_id} 應該屬於Block {correct_block.block_id}")
+                logger.debug(f"DEBUG: 物件 {obj.obj_id} 應該屬於Block {correct_block.block_id}")
             else:
-                print(f"DEBUG: 物件 {obj.obj_id} 沒有找到合適的Block (位置: {current_row})")
+                logger.debug(f"DEBUG: 物件 {obj.obj_id} 沒有找到合適的Block (位置: {current_row})")
                 # 找出最接近的Block
                 closest_blocks = []
                 for block in container.blocks:
@@ -2756,7 +2760,7 @@ class BlockManager:
                     elif current_row > block.rng_to.row:
                         closest_blocks.append(f"Block {block.block_id} 到第{block.rng_to.row}行結束 (物件在其後面)")
                 if closest_blocks:
-                    print(f"DEBUG:   最接近的Block: {', '.join(closest_blocks)}")
+                    logger.debug(f"DEBUG:   最接近的Block: {', '.join(closest_blocks)}")
             
             if correct_block and correct_block.block_id != current_block_id:
                 reassignment_needed.append({
@@ -2764,7 +2768,7 @@ class BlockManager:
                     'old_block_id': current_block_id,
                     'new_block_id': correct_block.block_id
                 })
-                print(f"DEBUG: 物件 {obj.obj_id} 需要重新分配：從 {current_block_id} -> {correct_block.block_id} (位置: {current_row})")
+                logger.debug(f"DEBUG: 物件 {obj.obj_id} 需要重新分配：從 {current_block_id} -> {correct_block.block_id} (位置: {current_row})")
         
         # 執行重新分配
         for assignment in reassignment_needed:
@@ -2773,9 +2777,9 @@ class BlockManager:
             new_block_id = assignment['new_block_id']
             
             obj.block_id = new_block_id
-            print(f"DEBUG: 完成物件 {obj.obj_id} 重新分配：{old_block_id} -> {new_block_id}")
+            logger.debug(f"DEBUG: 完成物件 {obj.obj_id} 重新分配：{old_block_id} -> {new_block_id}")
         
-        print(f"DEBUG: 重新分配完成，共處理 {len(reassignment_needed)} 個物件")
+        logger.debug(f"DEBUG: 重新分配完成，共處理 {len(reassignment_needed)} 個物件")
 
     def _update_tags_positions_after_row_insertion(
         self, 
@@ -2796,20 +2800,20 @@ class BlockManager:
         if inserted_rows <= 0:
             return
             
-        print(f"DEBUG: 更新標籤位置：在第 {inserted_after_row} 行後插入了 {inserted_rows} 行")
+        logger.debug(f"DEBUG: 更新標籤位置：在第 {inserted_after_row} 行後插入了 {inserted_rows} 行")
         
         # 更新容器中所有物件的位置
         for obj in container.objects:
             if obj.cell_position.row > inserted_after_row:
                 old_row = obj.cell_position.row
                 obj.cell_position.row += inserted_rows
-                print(f"DEBUG: 物件 {obj.obj_id} 位置更新：第 {old_row} 行 -> 第 {obj.cell_position.row} 行")
+                logger.debug(f"DEBUG: 物件 {obj.obj_id} 位置更新：第 {old_row} 行 -> 第 {obj.cell_position.row} 行")
                 
                 # 同步更新render_context中對應標籤的位置
                 tag = render_context.get_tag_for_object(obj.obj_id)
                 if tag:
                     tag.cell_position.row += inserted_rows
-                    print(f"DEBUG: 標籤 {tag.tag_name} 位置更新：第 {old_row} 行 -> 第 {tag.cell_position.row} 行")
+                    logger.debug(f"DEBUG: 標籤 {tag.tag_name} 位置更新：第 {old_row} 行 -> 第 {tag.cell_position.row} 行")
         
         # 在重新分配之前，先更新Gap blocks的範圍以包含插入的行
         self._update_gap_blocks_range_for_insertions(container, inserted_after_row, inserted_rows)
@@ -2824,12 +2828,12 @@ class BlockManager:
                 old_to = block.rng_to.row
                 block.rng_from.row += inserted_rows
                 block.rng_to.row += inserted_rows
-                print(f"DEBUG: 區塊 {block.block_id} 位置更新：第 {old_from}-{old_to} 行 -> 第 {block.rng_from.row}-{block.rng_to.row} 行")
+                logger.debug(f"DEBUG: 區塊 {block.block_id} 位置更新：第 {old_from}-{old_to} 行 -> 第 {block.rng_from.row}-{block.rng_to.row} 行")
             elif block.rng_from.row <= inserted_after_row < block.rng_to.row:
                 # 插入點在區塊內部，只更新結束位置
                 old_to = block.rng_to.row
                 block.rng_to.row += inserted_rows
-                print(f"DEBUG: 區塊 {block.block_id} 結束位置更新：第 {block.rng_from.row}-{old_to} 行 -> 第 {block.rng_from.row}-{block.rng_to.row} 行")
+                logger.debug(f"DEBUG: 區塊 {block.block_id} 結束位置更新：第 {block.rng_from.row}-{old_to} 行 -> 第 {block.rng_from.row}-{block.rng_to.row} 行")
     
     def _render_all_blocks_content(
         self,
@@ -2851,7 +2855,7 @@ class BlockManager:
         """
         worksheet = workbook[container.sheet_name]
         
-        print(f"DEBUG: 開始渲染所有區塊內容 - {container.sheet_name}")
+        logger.debug(f"DEBUG: 開始渲染所有區塊內容 - {container.sheet_name}")
         
         # 收集所有需要渲染的標籤
         tags_to_render = []
@@ -2864,9 +2868,9 @@ class BlockManager:
                     'obj': obj,
                     'data': render_context.get_data(tag.tag_name)
                 })
-                print(f"DEBUG: 準備渲染標籤 {tag.tag_name} 在位置 ({tag.cell_position.row}, {tag.cell_position.col})")
+                logger.debug(f"DEBUG: 準備渲染標籤 {tag.tag_name} 在位置 ({tag.cell_position.row}, {tag.cell_position.col})")
         
-        print(f"DEBUG: 總共 {len(tags_to_render)} 個標籤需要渲染")
+        logger.debug(f"DEBUG: 總共 {len(tags_to_render)} 個標籤需要渲染")
         
         # 按位置排序（從上到下，從左到右）
         tags_to_render.sort(key=lambda x: (x['tag'].cell_position.row, x['tag'].cell_position.col))
@@ -2877,8 +2881,8 @@ class BlockManager:
             obj = tag_info['obj']
             data = tag_info['data']
             
-            print(f"DEBUG: 渲染標籤 {tag.tag_name} - 類型: {obj.obj_type.value} - 位置: ({tag.cell_position.row}, {tag.cell_position.col})")
-            print(f"DEBUG: 數據值: {repr(data)}")
+            logger.debug(f"DEBUG: 渲染標籤 {tag.tag_name} - 類型: {obj.obj_type.value} - 位置: ({tag.cell_position.row}, {tag.cell_position.col})")
+            logger.debug(f"DEBUG: 數據值: {repr(data)}")
             
             if obj.obj_type == ObjectType.SIMPLE:
                 # 渲染簡單標籤
@@ -2887,7 +2891,7 @@ class BlockManager:
                 # 渲染表格標籤
                 self._render_table_tag(worksheet, tag, obj, data, renderer, container, render_context)
             
-        print(f"DEBUG: 完成所有標籤渲染")
+        logger.debug(f"DEBUG: 完成所有標籤渲染")
         
         # 渲染完成後，更新圖片物件位置
         # DEBUG: Preparing to update image positions
@@ -2917,10 +2921,10 @@ class BlockManager:
                 # 創建一個臨時workbook參考（renderer需要）
                 workbook = worksheet.parent
                 renderer.render_simple_tag(tag, data, workbook, worksheet)
-                # print(f"DEBUG: 使用renderer渲染簡單標籤 {tag.tag_name} 在 ({tag.cell_position.row}, {tag.cell_position.col})")
+                # logger.debug(f"DEBUG: 使用renderer渲染簡單標籤 {tag.tag_name} 在 ({tag.cell_position.row}, {tag.cell_position.col})")
                 return
             except Exception as e:
-                print(f"DEBUG: renderer渲染失敗，回退到基本方法: {e}")
+                logger.debug(f"DEBUG: renderer渲染失敗，回退到基本方法: {e}")
         
         # 回退到基本的字符串替換方法
         row = tag.cell_position.row
@@ -2932,7 +2936,7 @@ class BlockManager:
         # 檢查是否為合併儲存格
         from openpyxl.cell.cell import MergedCell
         if isinstance(cell, MergedCell):
-            print(f"DEBUG: 跳過合併儲存格 ({row}, {col})")
+            logger.debug(f"DEBUG: 跳過合併儲存格 ({row}, {col})")
             return
         
         # 獲取當前儲存格的值
@@ -2948,17 +2952,17 @@ class BlockManager:
             if re.search(tag_pattern, current_value):
                 # 使用正規表達式替換標籤為數據值
                 new_value = re.sub(tag_pattern, str(data), current_value)
-                print(f"DEBUG: 簡單標籤 {tag.tag_name} 渲染前 - 儲存格當前值: {repr(current_value)}")
-                print(f"DEBUG: 簡單標籤 {tag.tag_name} 渲染後 - 新值: {repr(new_value)}")
+                logger.debug(f"DEBUG: 簡單標籤 {tag.tag_name} 渲染前 - 儲存格當前值: {repr(current_value)}")
+                logger.debug(f"DEBUG: 簡單標籤 {tag.tag_name} 渲染後 - 新值: {repr(new_value)}")
                 cell.value = new_value
-                print(f"DEBUG: 簡單標籤 {tag.tag_name} 已渲染: 使用正規表達式 '{tag_pattern}' -> '{data}' 在 ({row}, {col})")
+                logger.debug(f"DEBUG: 簡單標籤 {tag.tag_name} 已渲染: 使用正規表達式 '{tag_pattern}' -> '{data}' 在 ({row}, {col})")
             else:
-                print(f"DEBUG: 警告 - 儲存格 ({row}, {col}) 不包含標籤模式 {tag_pattern}")
-                print(f"DEBUG: 儲存格當前值: {repr(current_value)}")
+                logger.debug(f"DEBUG: 警告 - 儲存格 ({row}, {col}) 不包含標籤模式 {tag_pattern}")
+                logger.debug(f"DEBUG: 儲存格當前值: {repr(current_value)}")
         else:
             # 如果儲存格沒有值或不是字符串，直接設置數據
             cell.value = data
-            print(f"DEBUG: 簡單標籤 {tag.tag_name} 直接設置值: {data} 在 ({row}, {col})")
+            logger.debug(f"DEBUG: 簡單標籤 {tag.tag_name} 直接設置值: {data} 在 ({row}, {col})")
     
     def _render_table_tag(
         self,
@@ -2983,7 +2987,7 @@ class BlockManager:
         import pandas as pd
         
         if not isinstance(data, pd.DataFrame):
-            print(f"DEBUG: 警告 - 標籤 {tag.tag_name} 的數據不是DataFrame")
+            logger.debug(f"DEBUG: 警告 - 標籤 {tag.tag_name} 的數據不是DataFrame")
             return
         
         row = tag.cell_position.row
@@ -2993,11 +2997,11 @@ class BlockManager:
         original_row = tag.cell_position.row
         original_col = tag.cell_position.col
 
-        print(f"DEBUG_TAG_CLEAR: 檢查標籤清除 - 原始位置: ({original_row}, {original_col})")
+        logger.debug(f"DEBUG_TAG_CLEAR: 檢查標籤清除 - 原始位置: ({original_row}, {original_col})")
 
         # 清除原始位置的標籤
         original_cell = worksheet.cell(row=original_row, column=original_col)
-        print(f"DEBUG_TAG_CLEAR: 原始位置內容: '{original_cell.value}'")
+        logger.debug(f"DEBUG_TAG_CLEAR: 原始位置內容: '{original_cell.value}'")
 
         # 保存原始樣式
         original_style = self._copy_cell_style_info(original_cell) if original_cell.value else None
@@ -3006,24 +3010,24 @@ class BlockManager:
         from openpyxl.cell.cell import MergedCell
         if not isinstance(original_cell, MergedCell):
             original_cell.value = None
-            print(f"DEBUG_TAG_CLEAR: 已清除原始位置 ({original_row}, {original_col}) 的標籤")
+            logger.debug(f"DEBUG_TAG_CLEAR: 已清除原始位置 ({original_row}, {original_col}) 的標籤")
 
         # 如果當前使用的位置與原始位置不同，也要清除當前位置
         if row != original_row or col != original_col:
             current_cell = worksheet.cell(row=row, column=col)
-            print(f"DEBUG_TAG_CLEAR: 當前位置 ({row}, {col}) 內容: '{current_cell.value}'")
+            logger.debug(f"DEBUG_TAG_CLEAR: 當前位置 ({row}, {col}) 內容: '{current_cell.value}'")
             if not isinstance(current_cell, MergedCell):
                 current_cell.value = None
-                print(f"DEBUG_TAG_CLEAR: 已清除當前位置 ({row}, {col}) 的標籤")
+                logger.debug(f"DEBUG_TAG_CLEAR: 已清除當前位置 ({row}, {col}) 的標籤")
         
         # 檢查是否需要渲染header
         render_header = obj.having_header if hasattr(obj, 'having_header') else True
-        print(f"DEBUG_TAG_CONDITION: 標籤 {tag.tag_name} - has_condition: {tag.has_condition}, condition: '{tag.condition}'")
+        logger.debug(f"DEBUG_TAG_CONDITION: 標籤 {tag.tag_name} - has_condition: {tag.has_condition}, condition: '{tag.condition}'")
         if tag.has_condition and tag.condition == "noheader":
             render_header = False
-            print(f"DEBUG_TAG_CONDITION: 標籤 {tag.tag_name} 被識別為 noheader 模式")
+            logger.debug(f"DEBUG_TAG_CONDITION: 標籤 {tag.tag_name} 被識別為 noheader 模式")
 
-        print(f"DEBUG: 渲染表格標籤 {tag.tag_name} - 渲染header: {render_header}")
+        logger.debug(f"DEBUG: 渲染表格標籤 {tag.tag_name} - 渲染header: {render_header}")
         
         # 不管物件類型是 TABLE 還是 TABLE_OBJ，都要檢查是否有表格物件需要更新
         # 找到對應的表格物件
@@ -3032,7 +3036,7 @@ class BlockManager:
 
         # 修正：優先透過物件顯示名稱匹配表格物件（更可靠）
         obj_display_name = getattr(obj, 'display_name', None)
-        print(f"DEBUG: 查找表格物件 - 標籤: {tag.tag_name}, 物件顯示名稱: {obj_display_name}")
+        logger.debug(f"DEBUG: 查找表格物件 - 標籤: {tag.tag_name}, 物件顯示名稱: {obj_display_name}")
 
         # 首先嘗試透過顯示名稱匹配（更智能的匹配策略）
         if obj_display_name:
@@ -3041,7 +3045,7 @@ class BlockManager:
                 table = tables[table_name]
                 if obj_display_name in table_name or table_name.endswith(obj_display_name):
                     table_obj = table
-                    print(f"DEBUG: 透過名稱匹配找到表格: {table_name}")
+                    logger.debug(f"DEBUG: 透過名稱匹配找到表格: {table_name}")
                     break
 
             # 策略2：如果找不到，嘗試通過標籤名稱匹配（去掉前綴）
@@ -3051,14 +3055,14 @@ class BlockManager:
                     # 檢查表格名稱是否包含標籤名稱
                     if tag.tag_name in table_name:
                         table_obj = table
-                        print(f"DEBUG: 透過標籤名稱匹配找到表格: {table_name}")
+                        logger.debug(f"DEBUG: 透過標籤名稱匹配找到表格: {table_name}")
                         break
 
             # 策略3：基於順序的智能匹配（針對多表格場景）
             if not table_obj:
                 # 獲取所有表格，按名稱排序
                 sorted_tables = sorted(tables.keys())
-                print(f"DEBUG: 可用表格列表: {sorted_tables}")
+                logger.debug(f"DEBUG: 可用表格列表: {sorted_tables}")
 
                 # 根據標籤名稱推斷是第幾個表格
                 table_index = -1
@@ -3074,17 +3078,17 @@ class BlockManager:
                 if table_index >= 0 and table_index < len(sorted_tables):
                     table_name = sorted_tables[table_index]
                     table_obj = tables[table_name]
-                    print(f"DEBUG: 透過順序匹配找到表格: {table_name} (索引: {table_index})")
+                    logger.debug(f"DEBUG: 透過順序匹配找到表格: {table_name} (索引: {table_index})")
                 else:
-                    print(f"DEBUG: 順序匹配失敗 - 標籤: {tag.tag_name}, 索引: {table_index}, 可用表格數: {len(sorted_tables)}")
+                    logger.debug(f"DEBUG: 順序匹配失敗 - 標籤: {tag.tag_name}, 索引: {table_index}, 可用表格數: {len(sorted_tables)}")
 
         # 如果名稱匹配失敗，再嘗試透過位置找到對應的表格物件（備用方案）
         if not table_obj:
             from openpyxl.utils import cell as cell_utils
-            print(f"DEBUG: 名稱匹配失敗，嘗試位置匹配 - 標籤位置: ({row}, {col})")
+            logger.debug(f"DEBUG: 名稱匹配失敗，嘗試位置匹配 - 標籤位置: ({row}, {col})")
             for table_name in tables:
                 table = tables[table_name]
-                print(f"DEBUG: 檢查表格 {table_name}, 範圍: {getattr(table, 'ref', 'N/A')}")
+                logger.debug(f"DEBUG: 檢查表格 {table_name}, 範圍: {getattr(table, 'ref', 'N/A')}")
                 # 解析表格範圍
                 if hasattr(table, 'ref'):
                     ref_str = table.ref
@@ -3099,12 +3103,12 @@ class BlockManager:
                         # 更精確的條件：標籤位置在表格起始行，且在表格列範圍內
                         if (row == start_row and start_col <= col <= end_col):
                             table_obj = table
-                            print(f"DEBUG: 透過位置匹配找到表格: {table_name}")
+                            logger.debug(f"DEBUG: 透過位置匹配找到表格: {table_name}")
                             break
                         # 或者標籤在表格範圍內的其他位置
                         elif (start_row <= row <= end_row and start_col <= col <= end_col):
                             table_obj = table
-                            print(f"DEBUG: 透過位置匹配找到表格: {table_name}")
+                            logger.debug(f"DEBUG: 透過位置匹配找到表格: {table_name}")
                             break
         
         if table_obj:
@@ -3114,12 +3118,12 @@ class BlockManager:
             )
         else:
             # 如果找不到表格物件，使用普通渲染
-            print(f"DEBUG: 找不到對應的表格物件，標籤位置 ({row},{col})，使用普通渲染")
+            logger.debug(f"DEBUG: 找不到對應的表格物件，標籤位置 ({row},{col})，使用普通渲染")
             self._render_dataframe_content(
                 worksheet, data, row, col, render_header, original_style
             )
         
-        print(f"DEBUG: 完成表格標籤 {tag.tag_name} 渲染")
+        logger.debug(f"DEBUG: 完成表格標籤 {tag.tag_name} 渲染")
     
     def _render_dataframe_content(
         self,
@@ -3192,7 +3196,7 @@ class BlockManager:
                             existing_value = data_cell.value
                             if isinstance(existing_value, str) and existing_value.startswith('='):
                                 # 儲存格已包含公式，跳過不覆蓋，讓公式自動計算
-                                print(f"DEBUG: 保留公式 - 位置 ({current_row}, {target_col}) 包含公式: {existing_value}")
+                                logger.debug(f"DEBUG: 保留公式 - 位置 ({current_row}, {target_col}) 包含公式: {existing_value}")
                             else:
                                 # 處理公式 - 如果DataFrame值是字符串且以=開頭，視為Excel公式
                                 if isinstance(value, str) and value.startswith('='):
@@ -3203,7 +3207,7 @@ class BlockManager:
                         # 計算此合併儲存格佔用的額外列數
                         merge_span = merge_range.max_col - merge_range.min_col
                         cumulative_offset += merge_span
-                        print(f"DEBUG: 合併儲存格偵測 - 行{current_row}, 列{target_col}, 合併範圍: {merge_range}, 新偏移: {cumulative_offset}")
+                        logger.debug(f"DEBUG: 合併儲存格偵測 - 行{current_row}, 列{target_col}, 合併範圍: {merge_range}, 新偏移: {cumulative_offset}")
                     else:
                         # 不是左上角，需要跳過並調整偏移
                         # 找到合併範圍的右邊界，將目標列移到合併範圍之後
@@ -3217,14 +3221,14 @@ class BlockManager:
                             existing_value = data_cell.value
                             if isinstance(existing_value, str) and existing_value.startswith('='):
                                 # 儲存格已包含公式，跳過不覆蓋，讓公式自動計算
-                                print(f"DEBUG: 保留公式 - 位置 ({current_row}, {target_col}) 包含公式: {existing_value}")
+                                logger.debug(f"DEBUG: 保留公式 - 位置 ({current_row}, {target_col}) 包含公式: {existing_value}")
                             else:
                                 # 處理公式 - 如果DataFrame值是字符串且以=開頭，視為Excel公式
                                 if isinstance(value, str) and value.startswith('='):
                                     data_cell.value = value  # Excel會自動處理公式
                                 else:
                                     data_cell.value = value
-                        print(f"DEBUG: 跳過合併儲存格 - 行{current_row}, 原列{start_col + col_idx}, 新列{target_col}, 偏移: {cumulative_offset}")
+                        logger.debug(f"DEBUG: 跳過合併儲存格 - 行{current_row}, 原列{start_col + col_idx}, 新列{target_col}, 偏移: {cumulative_offset}")
                 else:
                     # 沒有合併儲存格，正常寫入數據
                     data_cell = worksheet.cell(row=current_row, column=target_col)
@@ -3233,7 +3237,7 @@ class BlockManager:
                         existing_value = data_cell.value
                         if isinstance(existing_value, str) and existing_value.startswith('='):
                             # 儲存格已包含公式，跳過不覆蓋，讓公式自動計算
-                            print(f"DEBUG: 保留公式 - 位置 ({current_row}, {target_col}) 包含公式: {existing_value}")
+                            logger.debug(f"DEBUG: 保留公式 - 位置 ({current_row}, {target_col}) 包含公式: {existing_value}")
                         else:
                             # 處理公式 - 如果DataFrame值是字符串且以=開頭，視為Excel公式
                             if isinstance(value, str) and value.startswith('='):
@@ -3252,7 +3256,7 @@ class BlockManager:
             start_col + num_cols - 1
         )
         
-        print(f"DEBUG: DataFrame內容已渲染 - 起始位置: ({start_row}, {start_col}), header: {render_header}")
+        logger.debug(f"DEBUG: DataFrame內容已渲染 - 起始位置: ({start_row}, {start_col}), header: {render_header}")
     
     def _apply_table_borders(
         self,
@@ -3300,7 +3304,7 @@ class BlockManager:
                     bottom=bottom_border
                 )
         
-        print(f"DEBUG: 表格邊框已應用 - 範圍: ({start_row},{start_col}) 到 ({end_row},{end_col})")
+        logger.debug(f"DEBUG: 表格邊框已應用 - 範圍: ({start_row},{start_col}) 到 ({end_row},{end_col})")
     
     def _render_dataframe_to_table_object(
         self,
@@ -3323,10 +3327,10 @@ class BlockManager:
         import pandas as pd
         from openpyxl.utils import cell as cellutil
         
-        print(f"DEBUG: 開始渲染DataFrame到表格物件")
-        print(f"DEBUG: 表格物件名稱: {table_obj.displayName if hasattr(table_obj, 'displayName') else 'Unknown'}")
-        print(f"DEBUG: DataFrame大小: {len(dataframe)} 行 x {len(dataframe.columns)} 列")
-        print(f"DEBUG: 標籤位置: ({start_row}, {start_col})")
+        logger.debug(f"DEBUG: 開始渲染DataFrame到表格物件")
+        logger.debug(f"DEBUG: 表格物件名稱: {table_obj.displayName if hasattr(table_obj, 'displayName') else 'Unknown'}")
+        logger.debug(f"DEBUG: DataFrame大小: {len(dataframe)} 行 x {len(dataframe.columns)} 列")
+        logger.debug(f"DEBUG: 標籤位置: ({start_row}, {start_col})")
         
         # 解析表格物件的原始範圍來獲取正確的標題行位置
         original_ref = table_obj.ref
@@ -3335,7 +3339,7 @@ class BlockManager:
             # 獲取表格物件的原始起始行（標題行）
             table_start_row, table_start_col = cellutil.coordinate_to_tuple(start_cell)
             table_end_row, table_end_col = cellutil.coordinate_to_tuple(end_cell)
-            print(f"DEBUG: 表格物件原始範圍: {original_ref} (行 {table_start_row}-{table_end_row})")
+            logger.debug(f"DEBUG: 表格物件原始範圍: {original_ref} (行 {table_start_row}-{table_end_row})")
         else:
             # 如果沒有範圍，使用標籤位置
             table_start_row = start_row
@@ -3357,9 +3361,9 @@ class BlockManager:
         new_ref = f"{start_col_letter}{table_start_row}:{end_col_letter}{table_start_row + data_rows}"
         
         # 更新表格物件的範圍
-        print(f"DEBUG: 更新表格物件範圍 - 原始: {table_obj.ref} -> 新: {new_ref}")
+        logger.debug(f"DEBUG: 更新表格物件範圍 - 原始: {table_obj.ref} -> 新: {new_ref}")
         table_obj.ref = new_ref
-        print(f"DEBUG: 表格物件範圍已更新")
+        logger.debug(f"DEBUG: 表格物件範圍已更新")
         
         # 渲染表頭（在表格物件的原始標題行位置）
         from openpyxl.cell.cell import MergedCell
@@ -3401,14 +3405,14 @@ class BlockManager:
                                 template_cell.value, template_row_idx, data_row
                             )
                             target_cell.value = adjusted_formula
-            print(f"DEBUG: 已處理 {original_cols - len(dataframe.columns)} 個超出DataFrame的欄位（公式欄）")
+            logger.debug(f"DEBUG: 已處理 {original_cols - len(dataframe.columns)} 個超出DataFrame的欄位（公式欄）")
         
         # 保留表格物件的列資訊，不重新設置（避免丟失公式欄等原始欄位）
         if hasattr(table_obj, 'tableColumns') and table_obj.tableColumns:
             # 保留原始的 tableColumns，不重新設置，確保包含公式欄位
-            print(f"DEBUG: 保留原始表格物件列資訊，列數: {len(table_obj.tableColumns)} (包含公式欄)")
+            logger.debug(f"DEBUG: 保留原始表格物件列資訊，列數: {len(table_obj.tableColumns)} (包含公式欄)")
         
-        print(f"DEBUG: DataFrame已渲染到表格物件 - 範圍: {new_ref}")
+        logger.debug(f"DEBUG: DataFrame已渲染到表格物件 - 範圍: {new_ref}")
     
     def _apply_cell_style_info(self, cell: Cell, style_info: Dict[str, Any]) -> None:
         """
@@ -3473,7 +3477,7 @@ class BlockManager:
                     hidden=prot_data.get('hidden', False)
                 )
         except Exception as e:
-            print(f"DEBUG: 應用樣式時發生錯誤: {e}")
+            logger.debug(f"DEBUG: 應用樣式時發生錯誤: {e}")
     
     def _update_table_object_range(
         self,
@@ -3591,13 +3595,13 @@ class BlockManager:
                 if cache_key in self.shape_info_cache:
                     shape_info = self.shape_info_cache[cache_key]
                     original_gap = shape_info.get('original_gap', 0)
-                    print(f"DEBUG: 從shape_info_cache獲取到gap信息: {original_gap} 行")
+                    logger.debug(f"DEBUG: 從shape_info_cache獲取到gap信息: {original_gap} 行")
                 else:
-                    print(f"DEBUG: 在shape_info_cache中找不到 {cache_key}")
+                    logger.debug(f"DEBUG: 在shape_info_cache中找不到 {cache_key}")
                     # DEBUG: 列印所有可用的cache keys
-                    print(f"DEBUG: 可用的cache keys: {list(self.shape_info_cache.keys())}")
+                    logger.debug(f"DEBUG: 可用的cache keys: {list(self.shape_info_cache.keys())}")
             else:
-                print(f"DEBUG: 無法從shape_info_cache獲取gap信息")
+                logger.debug(f"DEBUG: 無法從shape_info_cache獲取gap信息")
 
             # 表格起始位置計算：
             # 重要修正：template row插入過程已經維持了正確的相對位置和gap
@@ -3605,23 +3609,23 @@ class BlockManager:
             actual_table_row = max(1, tag_row - 1)  # 標籤位置 - 1 = 表格起始位置
             actual_table_col = matching_obj.cell_position.col
 
-            print(f"DEBUG: 表格位置計算: 標籤行{tag_row} -> 表格行{actual_table_row}, 列{actual_table_col} (template插入已維持gap)")
+            logger.debug(f"DEBUG: 表格位置計算: 標籤行{tag_row} -> 表格行{actual_table_row}, 列{actual_table_col} (template插入已維持gap)")
         else:
             actual_table_row = table_obj_row
             actual_table_col = orig_min_col
-            print(f"DEBUG: 使用表格物件原始位置: 行{actual_table_row}, 列{actual_table_col}")
+            logger.debug(f"DEBUG: 使用表格物件原始位置: 行{actual_table_row}, 列{actual_table_col}")
 
         if render_header:
             # 如果需要渲染表頭，表頭從表格物件位置開始
             current_row = actual_table_row
             current_col = actual_table_col
-            print(f"DEBUG: 表頭渲染位置: ({current_row}, {current_col})")
+            logger.debug(f"DEBUG: 表頭渲染位置: ({current_row}, {current_col})")
         else:
             # noheader模式：數據從表頭下一行開始渲染，保留模板原有表頭
             # 重要修正：noheader模式下不檢查保護偏移，因為我們已經在_copy_template_row_and_insert_new_rows中跳過了保護
             current_row = actual_table_row + 1  # 只跳過表頭行，不需要額外保護偏移
             current_col = actual_table_col
-            print(f"DEBUG: 數據渲染位置（noheader模式）: ({current_row}, {current_col}) - 只跳過表頭行，無保護偏移")
+            logger.debug(f"DEBUG: 數據渲染位置（noheader模式）: ({current_row}, {current_col}) - 只跳過表頭行，無保護偏移")
         
         # 渲染表頭（如果需要）
         if render_header:
@@ -3656,13 +3660,13 @@ class BlockManager:
             table_start_row = actual_table_row  # 表格物件位置
             table_start_col = actual_table_col
             total_rows = data_rows + 1  # 包含表頭行
-            print(f"DEBUG: 有表頭模式 - 表格起始: ({table_start_row}, {table_start_col}) (表格物件位置), 總行數: {total_rows}")
+            logger.debug(f"DEBUG: 有表頭模式 - 表格起始: ({table_start_row}, {table_start_col}) (表格物件位置), 總行數: {total_rows}")
         else:
             # noheader模式：表格範圍仍從表格物件位置開始，但包含保留的模板表頭
             table_start_row = actual_table_row  # 表格物件位置（包含模板表頭）
             table_start_col = actual_table_col
             total_rows = data_rows + 1  # 包含保留的模板表頭行
-            print(f"DEBUG: noheader模式 - 表格起始: ({table_start_row}, {table_start_col}) (包含模板表頭), 總行數: {total_rows}")
+            logger.debug(f"DEBUG: noheader模式 - 表格起始: ({table_start_row}, {table_start_col}) (包含模板表頭), 總行數: {total_rows}")
         
         new_end_row = table_start_row + total_rows - 1
         new_end_col = table_start_col + actual_cols - 1
@@ -3673,9 +3677,9 @@ class BlockManager:
         end_cell = f"{get_column_letter(new_end_col)}{new_end_row}"
         new_range = f"{start_cell}:{end_cell}"
         
-        print(f"DEBUG: 表格範圍更新 - 原始: {table_obj.ref} -> 新: {new_range}")
-        print(f"DEBUG: 原始表格有表頭: {original_has_header}, render_header: {render_header}")
-        print(f"DEBUG: table_start_row: {table_start_row}, total_rows: {total_rows}")
+        logger.debug(f"DEBUG: 表格範圍更新 - 原始: {table_obj.ref} -> 新: {new_range}")
+        logger.debug(f"DEBUG: 原始表格有表頭: {original_has_header}, render_header: {render_header}")
+        logger.debug(f"DEBUG: table_start_row: {table_start_row}, total_rows: {total_rows}")
 
         # *** 修正：使用統一的表格屬性更新方法，確保 headerRowCount 正確設置 ***
         # 呼叫 renderer 的 _update_table_range_sync 方法來確保所有表格屬性正確設置
@@ -3686,7 +3690,7 @@ class BlockManager:
         include_header = render_header
         table_name = getattr(table_obj, 'name', 'Unknown')
 
-        print(f"DEBUG_BLOCK: 呼叫 _update_table_range_sync - 表格: {table_name}, include_header: {include_header}")
+        logger.debug(f"DEBUG_BLOCK: 呼叫 _update_table_range_sync - 表格: {table_name}, include_header: {include_header}")
         temp_renderer._update_table_range_sync(table_obj, new_range, f"[Block渲染]{table_name}", dataframe, include_header)
 
     def _check_preset_header_protection(
@@ -3706,7 +3710,7 @@ class BlockManager:
         Returns:
             int: 需要額外插入的保護行數
         """
-        print(f"DEBUG_PROTECTION: 檢查預設header保護，template_row={template_row}, data_rows_needed={data_rows_needed}")
+        logger.debug(f"DEBUG_PROTECTION: 檢查預設header保護，template_row={template_row}, data_rows_needed={data_rows_needed}")
 
         # 計算數據會佔用的行範圍
         data_end_row = template_row + data_rows_needed - 1
@@ -3718,10 +3722,10 @@ class BlockManager:
         if self._is_potential_preset_header(worksheet, potential_header_row):
             # 計算需要插入多少行來避免覆蓋
             protection_rows = 1  # 插入1行空行作為緩衝
-            print(f"DEBUG_PROTECTION: 檢測到第{potential_header_row}行可能是預設header，插入{protection_rows}行保護")
+            logger.debug(f"DEBUG_PROTECTION: 檢測到第{potential_header_row}行可能是預設header，插入{protection_rows}行保護")
             return protection_rows
 
-        print(f"DEBUG_PROTECTION: 未檢測到預設header衝突")
+        logger.debug(f"DEBUG_PROTECTION: 未檢測到預設header衝突")
         return 0
 
     def _is_potential_preset_header(self, worksheet: Worksheet, row: int) -> bool:
@@ -3745,13 +3749,13 @@ class BlockManager:
                     cell_value = str(cell.value).strip()
                     # 如果包含典型的表頭關鍵字，認為是預設header
                     if any(indicator in cell_value for indicator in header_indicators):
-                        print(f"DEBUG_PROTECTION: 第{row}行第{col}列發現表頭關鍵字: {cell_value}")
+                        logger.debug(f"DEBUG_PROTECTION: 第{row}行第{col}列發現表頭關鍵字: {cell_value}")
                         return True
 
             return False
 
         except Exception as e:
-            print(f"DEBUG_PROTECTION: 檢查預設header時出錯: {e}")
+            logger.debug(f"DEBUG_PROTECTION: 檢查預設header時出錯: {e}")
             return False
 
     def _check_preset_header_protection_simple(
@@ -3771,7 +3775,7 @@ class BlockManager:
         Returns:
             int: 需要額外插入的保護行數
         """
-        print(f"DEBUG_SIMPLE_PROTECTION: 檢查預設header保護，template_row={template_row}, data_rows_needed={data_rows_needed}")
+        logger.debug(f"DEBUG_SIMPLE_PROTECTION: 檢查預設header保護，template_row={template_row}, data_rows_needed={data_rows_needed}")
 
         # 計算數據會佔用的行範圍
         data_end_row = template_row + data_rows_needed - 1
@@ -3779,16 +3783,16 @@ class BlockManager:
         # 檢查數據結束行的下一行是否有預設header（工作表5的特殊情況）
         potential_header_row = data_end_row + 1
 
-        print(f"DEBUG_SIMPLE_PROTECTION: 數據會佔用第{template_row}行到第{data_end_row}行，檢查第{potential_header_row}行是否為預設header")
+        logger.debug(f"DEBUG_SIMPLE_PROTECTION: 數據會佔用第{template_row}行到第{data_end_row}行，檢查第{potential_header_row}行是否為預設header")
 
         # 檢查該行是否可能是預設header
         if self._is_potential_preset_header(worksheet, potential_header_row):
             # 計算需要插入多少行來避免覆蓋
             protection_rows = 1  # 插入1行空行作為緩衝
-            print(f"DEBUG_SIMPLE_PROTECTION: 檢測到第{potential_header_row}行可能是預設header，插入{protection_rows}行保護")
+            logger.debug(f"DEBUG_SIMPLE_PROTECTION: 檢測到第{potential_header_row}行可能是預設header，插入{protection_rows}行保護")
             return protection_rows
 
-        print(f"DEBUG_SIMPLE_PROTECTION: 未檢測到預設header衝突")
+        logger.debug(f"DEBUG_SIMPLE_PROTECTION: 未檢測到預設header衝突")
         return 0
 
     def _check_preset_header_protection_for_method2(
@@ -3808,7 +3812,7 @@ class BlockManager:
         Returns:
             int: 需要額外插入的保護行數
         """
-        print(f"DEBUG_METHOD2_PROTECTION: 檢查預設header保護，template_row={template_row}, data_rows_needed={data_rows_needed}")
+        logger.debug(f"DEBUG_METHOD2_PROTECTION: 檢查預設header保護，template_row={template_row}, data_rows_needed={data_rows_needed}")
 
         # 計算數據會佔用的行範圍
         # 當我們在template_row插入additional_rows時，數據會佔用：
@@ -3817,7 +3821,7 @@ class BlockManager:
         data_start_row = template_row
         data_end_row = template_row + data_rows_needed
 
-        print(f"DEBUG_METHOD2_PROTECTION: 數據會佔用第{data_start_row}行到第{data_end_row}行")
+        logger.debug(f"DEBUG_METHOD2_PROTECTION: 數據會佔用第{data_start_row}行到第{data_end_row}行")
 
         # 檢查數據範圍內（不包括標籤位置本身）是否有預設header
         for row in range(data_start_row + 1, data_end_row + 1):
@@ -3828,12 +3832,12 @@ class BlockManager:
                 data_rows_before_header = preset_header_row - data_start_row
                 protection_rows = data_rows_needed - data_rows_before_header + 1
 
-                print(f"DEBUG_METHOD2_PROTECTION: 檢測到第{row}行是預設header，會被數據覆蓋！")
-                print(f"DEBUG_METHOD2_PROTECTION: 數據需要{data_rows_needed}行，預設header在第{preset_header_row}行")
-                print(f"DEBUG_METHOD2_PROTECTION: 需要插入{protection_rows}行保護，將數據推移到預設header之後")
+                logger.debug(f"DEBUG_METHOD2_PROTECTION: 檢測到第{row}行是預設header，會被數據覆蓋！")
+                logger.debug(f"DEBUG_METHOD2_PROTECTION: 數據需要{data_rows_needed}行，預設header在第{preset_header_row}行")
+                logger.debug(f"DEBUG_METHOD2_PROTECTION: 需要插入{protection_rows}行保護，將數據推移到預設header之後")
                 return protection_rows
 
-        print(f"DEBUG_METHOD2_PROTECTION: 未檢測到預設header衝突")
+        logger.debug(f"DEBUG_METHOD2_PROTECTION: 未檢測到預設header衝突")
         return 0
 
     def _check_if_protection_applied(self, table_row: int, dataframe) -> int:
@@ -3858,12 +3862,12 @@ class BlockManager:
                 data_rows_before_header = preset_header_row - table_row - 1
                 protection_offset = data_rows_needed - data_rows_before_header
 
-                print(f"DEBUG_RENDER_PROTECTION: 檢測到第{preset_header_row}行有預設header")
-                print(f"DEBUG_RENDER_PROTECTION: 數據需要{data_rows_needed}行，預設header前有{data_rows_before_header}行")
-                print(f"DEBUG_RENDER_PROTECTION: 計算保護偏移: {protection_offset}")
+                logger.debug(f"DEBUG_RENDER_PROTECTION: 檢測到第{preset_header_row}行有預設header")
+                logger.debug(f"DEBUG_RENDER_PROTECTION: 數據需要{data_rows_needed}行，預設header前有{data_rows_before_header}行")
+                logger.debug(f"DEBUG_RENDER_PROTECTION: 計算保護偏移: {protection_offset}")
                 return protection_offset
 
-        print(f"DEBUG_RENDER_PROTECTION: 未檢測到需要保護偏移")
+        logger.debug(f"DEBUG_RENDER_PROTECTION: 未檢測到需要保護偏移")
         return 0
 
     def _is_potential_preset_header_render_check(self, row: int) -> bool:
@@ -3873,6 +3877,6 @@ class BlockManager:
         # 根據已知的預設header位置進行硬編碼檢查（臨時解決方案）
         # 在工作表5中，已知第8行和第11行有預設header
         if row == 8 or row == 11:
-            print(f"DEBUG_RENDER_PROTECTION: 第{row}行被識別為預設header位置")
+            logger.debug(f"DEBUG_RENDER_PROTECTION: 第{row}行被識別為預設header位置")
             return True
         return False
