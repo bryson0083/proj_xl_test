@@ -2563,13 +2563,16 @@ class BlockManager:
                 logger.debug(f"DEBUG: 重新創建推移後的合併儲存格: {merge_info['original_range']} -> {new_range}")
             
             # 複製template row的樣式和公式到新插入的行
+            # 效能：max_column 為模板寬度、在此迴圈內不會改變；預先計算一次，
+            # 避免每列都重新掃描整張(不斷變大的)工作表 → O(n²) 降為 O(n)
+            max_col = worksheet.max_column
             for copy_index in range(additional_rows):
                 target_row = template_row + 1 + copy_index
-                
+
                 logger.debug(f"DEBUG: 複製第 {template_row} 行到第 {target_row} 行")
-                
+
                 # 複製template row的內容到新插入的行
-                for col in range(1, worksheet.max_column + 1):
+                for col in range(1, max_col + 1):
                     template_cell = worksheet.cell(row=template_row, column=col)
                     target_cell = worksheet.cell(row=target_row, column=col)
                     
@@ -2610,65 +2613,28 @@ class BlockManager:
 
     def _copy_cell_style(self, source_cell, target_cell):
         """
-        複製儲存格樣式
-        
+        複製儲存格樣式。
+
+        openpyxl 將字型/框線/填色/數字格式/對齊/保護全部存於單一 StyleArray
+        （``cell._style`` 索引）。直接複製該索引可一次涵蓋全部樣式，
+        較逐一複製六個 StyleProxy 快數倍，且語意完全等價。
+
         Args:
             source_cell: 來源儲存格
             target_cell: 目標儲存格
         """
+        from copy import copy
+
         try:
-            # 使用copy方法來避免StyleProxy問題
-            from copy import copy
-            
-            # 複製字體
-            if source_cell.font:
-                try:
-                    target_cell.font = copy(source_cell.font)
-                except:
-                    pass
-            
-            # 複製邊框
-            if source_cell.border:
-                try:
-                    target_cell.border = copy(source_cell.border)
-                except:
-                    pass
-                
-            # 複製填充
-            if source_cell.fill:
-                try:
-                    target_cell.fill = copy(source_cell.fill)
-                except:
-                    pass
-                
-            # 複製數字格式
-            if source_cell.number_format:
-                try:
-                    target_cell.number_format = source_cell.number_format
-                except:
-                    pass
-                
-            # 複製對齊
-            if source_cell.alignment:
-                try:
-                    target_cell.alignment = copy(source_cell.alignment)
-                except:
-                    pass
-                
-            # 複製保護
-            if source_cell.protection:
-                try:
-                    target_cell.protection = copy(source_cell.protection)
-                except:
-                    pass
-                
+            if getattr(source_cell, "has_style", False):
+                target_cell._style = copy(source_cell._style)
         except Exception as e:
             logger.debug(f"DEBUG: 樣式複製失敗: {str(e)}")
-            # 至少複製數字格式
+            # 後備：至少複製數字格式
             try:
                 if source_cell.number_format:
                     target_cell.number_format = source_cell.number_format
-            except:
+            except Exception:
                 pass
 
     def _copy_merged_cells_to_new_rows(

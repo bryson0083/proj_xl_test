@@ -1,14 +1,20 @@
 """
-例外處理類別
+templexl 例外階層
+
+所有對外例外皆繼承自 ``TemplateError``，呼叫端可用它一次攔截本套件的全部錯誤。
 """
 
 
-class ExcelTemplateRendererError(Exception):
-    """基礎例外類別"""
+class TemplateError(Exception):
+    """所有 templexl 例外的基底類別。"""
     pass
 
 
-class TemplateNotFoundError(ExcelTemplateRendererError):
+#: 向後相容別名（舊名稱），新程式請使用 ``TemplateError``。
+ExcelTemplateRendererError = TemplateError
+
+
+class TemplateNotFoundError(TemplateError):
     """模板檔案不存在例外"""
     
     def __init__(self, template_path: str):
@@ -16,7 +22,7 @@ class TemplateNotFoundError(ExcelTemplateRendererError):
         super().__init__(f"模板檔案不存在: {template_path}")
 
 
-class InvalidDataTypeError(ExcelTemplateRendererError):
+class InvalidDataTypeError(TemplateError):
     """不支援的資料類型例外"""
     
     def __init__(self, data_type: str, tag_name: str):
@@ -25,7 +31,7 @@ class InvalidDataTypeError(ExcelTemplateRendererError):
         super().__init__(f"標籤 '{tag_name}' 不支援資料類型: {data_type}")
 
 
-class InvalidTagSyntaxError(ExcelTemplateRendererError):
+class InvalidTagSyntaxError(TemplateError):
     """無效標籤語法例外"""
     
     def __init__(self, tag_string: str, position: str = ""):
@@ -35,7 +41,7 @@ class InvalidTagSyntaxError(ExcelTemplateRendererError):
         super().__init__(f"無效的標籤語法: '{tag_string}'{pos_info}")
 
 
-class RenderError(ExcelTemplateRendererError):
+class RenderError(TemplateError):
     """渲染過程錯誤例外"""
     
     def __init__(self, message: str, tag_name: str = "", sheet_name: str = ""):
@@ -50,7 +56,7 @@ class RenderError(ExcelTemplateRendererError):
         super().__init__(f"渲染錯誤: {message}{location_info}")
 
 
-class RangeOverlapError(ExcelTemplateRendererError):
+class RangeOverlapError(TemplateError):
     """範圍重疊錯誤例外"""
     
     def __init__(self, obj1_id: str, obj2_id: str, sheet_name: str = ""):
@@ -61,7 +67,7 @@ class RangeOverlapError(ExcelTemplateRendererError):
         super().__init__(f"物件範圍重疊: {obj1_id} 與 {obj2_id}{sheet_info}")
 
 
-class TableObjectConflictError(ExcelTemplateRendererError):
+class TableObjectConflictError(TemplateError):
     """表格物件衝突錯誤例外"""
     
     def __init__(self, table_ids: list, sheet_name: str = ""):
@@ -72,7 +78,7 @@ class TableObjectConflictError(ExcelTemplateRendererError):
         super().__init__(f"表格物件範圍衝突: {table_list}{sheet_info}")
 
 
-class FileFormatError(ExcelTemplateRendererError):
+class FileFormatError(TemplateError):
     """檔案格式錯誤例外"""
     
     def __init__(self, file_path: str, expected_format: str = "xlsx/xlsm"):
@@ -81,18 +87,10 @@ class FileFormatError(ExcelTemplateRendererError):
         super().__init__(f"不支援的檔案格式: {file_path}，期望格式: {expected_format}")
 
 
-class MemoryError(ExcelTemplateRendererError):
+class MemoryError(TemplateError):
     """記憶體不足錯誤例外"""
-    
+
     def __init__(self, operation: str = ""):
         self.operation = operation
         op_info = f" ({operation})" if operation else ""
         super().__init__(f"記憶體不足{op_info}")
-
-
-class ProcessIsolationError(ExcelTemplateRendererError):
-    """程序隔離錯誤例外"""
-    
-    def __init__(self, process_id: str, message: str):
-        self.process_id = process_id
-        super().__init__(f"程序隔離錯誤 (Process: {process_id}): {message}")

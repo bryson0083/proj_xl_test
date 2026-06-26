@@ -1,8 +1,9 @@
 """
-主要API接口
+主要 API 介面。
 """
 import logging
 import os
+import re
 import uuid
 from typing import Any, Dict, Optional
 
@@ -15,110 +16,101 @@ from .core.parser import TemplateParser
 from .core.renderer import TemplateRenderer
 from .core.container import ContainerManager
 from .core.block_manager import BlockManager
-from .exceptions import TemplateNotFoundError, FileFormatError, RenderError
+from .exceptions import TemplateError, TemplateNotFoundError, FileFormatError, RenderError
 from .context import RenderContext
 from .models.container import Container
-from .utils.registry_utils import RegistryUtils
+from .result import RenderResult
+from .report import RenderReport
 
 
-def render_template(
-    template_path: str,
-    output_file_name: str,
-    process_id: Optional[str] = None,
-    validate_result: bool = False,
-    **data: Any
-) -> Dict[str, Any]:
-    """
-    主要的模板渲染函數（內建程序隔離安全機制）
+def render(
+    template: str,
+    output: str,
+    data: Optional[Dict[str, Any]] = None,
+    *,
+    with_report: bool = False,
+) -> RenderResult:
+    """以資料渲染 Excel 模板並寫出報表。
 
     Args:
-        template_path: 模板文件路徑
-        output_file_name: 輸出文件名稱
-        process_id: 程序識別ID（可選）
-                   - 若未提供，系統將自動生成唯一ID
-        validate_result: 是否驗證渲染結果（可選）
-        **data: 渲染數據，以關鍵字參數形式傳入
+        template: 模板檔路徑（``.xlsx`` 或 ``.xlsm``）。
+        output: 輸出檔路徑。
+        data: 渲染資料；鍵為標籤名稱，值為純量或 pandas DataFrame。
+        with_report: 是否產生渲染報告（除錯/維護用），預設關閉。
+            啟用時報告以記憶體物件掛在 ``RenderResult.report``，不會自動寫入磁碟。
 
     Returns:
-        Dict[str, Any]: 渲染結果資訊，包含：
-            - success: 渲染是否成功
-            - registry_file: 物件註冊表檔案路徑
-            - validation_result: 驗證結果（若啟用）
+        RenderResult: 含 ``output_path``、``warnings``，以及（啟用時）``report``。
 
     Raises:
-        TemplateNotFoundError: 模板文件不存在
-        FileFormatError: 不支援的檔案格式
-        RenderError: 渲染過程發生錯誤
+        TemplateNotFoundError: 模板檔不存在。
+        FileFormatError: 不支援的檔案格式。
+        RenderError: 渲染過程發生錯誤。
 
     Examples:
-        >>> from excel_template_renderer import render_template
         >>> import pandas as pd
-        >>>
-        >>> data = dict(
-        ...     oper_name="OPER_NAME",
-        ...     report_df=pd.DataFrame({'姓名': ['Alice', 'Bob'], '部門': ['技術部', '業務部']}),
-        ...     date_rng_desc="2025/01/01 - 2025/01/31"
+        >>> from templexl import render
+        >>> result = render(
+        ...     "template.xlsx",
+        ...     "output.xlsx",
+        ...     data={
+        ...         "oper_name": "OPER_NAME",
+        ...         "report_df": pd.DataFrame({"姓名": ["Alice", "Bob"]}),
+        ...     },
         ... )
-        >>> result = render_template('template.xlsx', 'output.xlsx', **data)
-        >>> logger.debug(f"註冊表檔案: {result['registry_file']}")
+        >>> result.output_path
+        'output.xlsx'
     """
-    # 生成程序ID
-    if process_id is None:
-        process_id = str(uuid.uuid4())
-    
-    registry_file = None
-    result = {
-        'success': False,
-        'registry_file': None,
-        'validation_result': None
-    }
+    template = str(template)
+    output = str(output)
+    data = dict(data) if data else {}
 
     try:
-        # 驗證模板文件存在
-        if not os.path.exists(template_path):
-            raise TemplateNotFoundError(template_path)
+        if not os.path.exists(template):
+            raise TemplateNotFoundError(template)
+        if not _is_supported_format(template):
+            raise FileFormatError(template)
 
-        # 驗證檔案格式
-        if not _is_supported_format(template_path):
-            raise FileFormatError(template_path)
-
-        # 載入模板工作簿
-        workbook = load_workbook(template_path)
-
-        # 創建渲染上下文
+        workbook = load_workbook(template)
         render_context = RenderContext(
-            process_id=process_id,
-            template_path=template_path,
-            output_path=output_file_name,
-            data=data
+            process_id=str(uuid.uuid4()),
+            template_path=template,
+            output_path=output,
+            data=data,
         )
 
-        # 執行渲染流程並收集容器資訊
         containers = _execute_render_pipeline(workbook, render_context)
-
-        # 在儲存前進行最終的表格範圍同步檢查
         _final_table_autofilter_sync(workbook)
+        workbook.save(output)
 
-        # 儲存輸出檔案
-        workbook.save(output_file_name)
+        warnings = _collect_unresolved_tag_warnings(workbook)
+        report = (
+            _build_render_report(containers, render_context, template, output)
+            if with_report
+            else None
+        )
+        return RenderResult(output_path=output, report=report, warnings=warnings)
 
-        # 生成物件註冊表
-        registry_file = _generate_object_registry(containers, render_context, template_path, output_file_name)
-
-        result['success'] = True
-        result['registry_file'] = registry_file
-
-        # 驗證結果（如果要求）
-        if validate_result:
-            result['validation_result'] = _validate_render_result(output_file_name, registry_file)
-
-        return result
-
+    except TemplateError:
+        # 本套件的已知例外（含 TemplateNotFoundError/FileFormatError/RenderError）原樣往上拋
+        raise
     except Exception as e:
-        if isinstance(e, (TemplateNotFoundError, FileFormatError, RenderError)):
-            raise
-        else:
-            raise RenderError(f"渲染過程發生未預期錯誤: {str(e)}")
+        raise RenderError(f"渲染過程發生未預期錯誤: {str(e)}")
+
+
+def _collect_unresolved_tag_warnings(workbook: Workbook) -> list:
+    """掃描輸出工作簿，回報任何仍未被解析的標籤（非致命警告）。"""
+    warnings: list = []
+    pattern = re.compile(r"#?\{\{.*?\}\}")
+    for worksheet in workbook.worksheets:
+        for row in worksheet.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str) and pattern.search(cell.value):
+                    warnings.append(
+                        f"未解析的標籤 '{cell.value}'"
+                        f"（工作表 '{worksheet.title}' 儲存格 {cell.coordinate}）"
+                    )
+    return warnings
 
 
 def _is_supported_format(file_path: str) -> bool:
@@ -322,151 +314,73 @@ def _final_table_autofilter_sync(workbook: Workbook) -> None:
     logger.debug(f"DEBUG_FINAL_SYNC: 同步檢查完成，共修正 {sync_count} 個表格")
 
 
-def _generate_object_registry(containers: list, render_context: 'RenderContext', template_path: str, output_path: str) -> str:
-    """
-    生成物件註冊表
+def _build_render_report(
+    containers: list,
+    render_context: 'RenderContext',
+    template_path: str,
+    output_path: str,
+) -> RenderReport:
+    """建立渲染報告（記憶體物件，不寫入磁碟）。
+
+    報告內容直接取自渲染後的容器狀態（單一真相來源），不另行重算物件落點，
+    避免「報告與實際輸出漂移」的維護陷阱。欄名以 ``get_column_letter`` 轉換，
+    正確支援超過 Z 欄的多字母欄名。
 
     Args:
-        containers: 容器清單
-        render_context: 渲染上下文
-        template_path: 模板文件路徑
-        output_path: 輸出文件路徑
+        containers: 渲染後的容器清單。
+        render_context: 渲染上下文（用於對應原始模板標籤）。
+        template_path: 模板文件路徑。
+        output_path: 輸出文件路徑。
 
     Returns:
-        str: 註冊表檔案路徑
+        RenderReport: 物件清單與摘要。
     """
-    from .models.base import ObjectType
-
-    # 建立註冊表結構
-    registry = RegistryUtils.create_empty_registry()
-    registry['template_path'] = template_path
-    registry['output_path'] = output_path
-
-    # 統計變數
+    worksheets: dict = {}
     total_objects = 0
-    objects_relocated = 0
-    position_changes = 0
-    size_changes = 0
 
-    # 處理每個容器（工作表）
     for container in containers:
-        worksheet_data = {
+        objects = []
+        for obj in container.objects:
+            coordinate = f"{get_column_letter(obj.cell_position.col)}{obj.cell_position.row}"
+            tag = render_context.get_tag_for_object(obj.obj_id)
+            objects.append({
+                'obj_id': obj.obj_id,
+                'display_name': obj.display_name,
+                'obj_type': obj.obj_type.value if hasattr(obj.obj_type, 'value') else str(obj.obj_type),
+                'sheet_name': obj.sheet_name,
+                'having_header': obj.having_header,
+                'is_multi_rows': obj.is_multi_rows,
+                'block_id': obj.block_id,
+                'template_tag': tag.tag_name if tag else None,
+                # 渲染後實際狀態（單一真相來源：渲染流程已更新的容器物件）
+                'position': {
+                    'row': obj.cell_position.row,
+                    'col': obj.cell_position.col,
+                    'coordinate': coordinate,
+                },
+                'data_shape': {
+                    'rows': obj.data_shape.rows,
+                    'cols': obj.data_shape.cols,
+                },
+            })
+            total_objects += 1
+
+        worksheets[container.sheet_name] = {
             'container_id': container.container_id,
             'sheet_name': container.sheet_name,
             'total_objects': len(container.objects),
             'total_blocks': len(container.blocks),
-            'objects': []
+            'objects': objects,
         }
 
-        # 處理每個物件
-        for obj in container.objects:
-            # 計算渲染前位置
-            position_before = {
-                'row': obj.cell_position.row,
-                'col': obj.cell_position.col,
-                'coordinate': f"{get_column_letter(obj.cell_position.col)}{obj.cell_position.row}",
-                'data_shape': {
-                    'rows': obj.data_shape.rows,
-                    'cols': obj.data_shape.cols
-                }
-            }
-
-            # 計算渲染後位置（基於標籤映射和數據）
-            position_after = position_before.copy()
-            tag = render_context.get_tag_for_object(obj.obj_id)
-
-            if tag and render_context.has_data(tag.tag_name):
-                data = render_context.get_data(tag.tag_name)
-                if hasattr(data, 'shape') and obj.obj_type in [ObjectType.TABLE, ObjectType.TABLE_OBJ]:
-                    # 表格物件可能會改變大小
-                    data_rows = data.shape[0]
-                    data_cols = data.shape[1]
-
-                    # 檢查是否有標題行
-                    has_header = obj.having_header
-                    if tag.has_condition and tag.condition == "noheader":
-                        has_header = False
-
-                    total_rows = data_rows + (1 if has_header else 0)
-
-                    position_after['data_shape'] = {
-                        'rows': total_rows,
-                        'cols': data_cols
-                    }
-
-                    if total_rows != obj.data_shape.rows or data_cols != obj.data_shape.cols:
-                        size_changes += 1
-
-            obj_data = {
-                'obj_id': obj.obj_id,
-                'obj_name': obj.obj_name if hasattr(obj, 'obj_name') else obj.display_name,
-                'display_name': obj.display_name,
-                'obj_type': obj.obj_type.value if hasattr(obj.obj_type, 'value') else str(obj.obj_type),
-                'sheet_name': obj.sheet_name,
-                'is_multi_rows': obj.is_multi_rows,
-                'having_header': obj.having_header,
-                'position_before': position_before,
-                'position_after': position_after,
-                'block_id': obj.block_id
-            }
-
-            worksheet_data['objects'].append(obj_data)
-            total_objects += 1
-
-        registry['worksheets'][container.sheet_name] = worksheet_data
-
-    # 更新摘要統計
-    registry['summary'].update({
+    summary = {
         'total_worksheets': len(containers),
         'total_objects': total_objects,
-        'objects_relocated': objects_relocated,
-        'position_changes': position_changes,
-        'size_changes': size_changes
-    })
+    }
 
-    # 序列化並儲存註冊表
-    try:
-        registry_file = RegistryUtils.serialize_registry(registry)
-        logger.debug(f"DEBUG: 物件註冊表已生成: {registry_file}")
-        return registry_file
-    except Exception as e:
-        logger.warning(f"WARNING: 無法生成物件註冊表: {e}")
-        return ""
-
-
-def _validate_render_result(output_file: str, registry_file: str) -> bool:
-    """
-    驗證渲染結果
-
-    Args:
-        output_file: 輸出檔案路徑
-        registry_file: 註冊表檔案路徑
-
-    Returns:
-        bool: 驗證是否通過
-    """
-    try:
-        # 基本檔案存在性檢查
-        if not os.path.exists(output_file):
-            logger.warning(f"WARNING: 輸出檔案不存在: {output_file}")
-            return False
-
-        if registry_file and not os.path.exists(registry_file):
-            logger.warning(f"WARNING: 註冊表檔案不存在: {registry_file}")
-            return False
-
-        # 如果有註冊表，驗證其格式
-        if registry_file:
-            registry = RegistryUtils.load_registry(registry_file)
-            is_valid, errors = RegistryUtils.validate_registry(registry)
-
-            if not is_valid:
-                logger.warning(f"WARNING: 註冊表驗證失敗: {errors}")
-                return False
-
-        logger.debug("DEBUG: 渲染結果驗證通過")
-        return True
-
-    except Exception as e:
-        logger.warning(f"WARNING: 驗證過程發生錯誤: {e}")
-        return False
+    return RenderReport(
+        template_path=template_path,
+        output_path=output_path,
+        worksheets=worksheets,
+        summary=summary,
+    )
