@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
-from tests.fixtures import non_table_data
+from tests.fixtures import TEMPLATE_NON_TABLE, non_table_data
 from tests.golden_compare import render_quietly
 from tests.render_adapter import do_render, formula_adjuster
 
@@ -35,11 +35,7 @@ def adjust():
 def non_table_output(tmp_path_factory):
     """以目前程式渲染 non_table 模板一次，供輸出層斷言共用。"""
     out = tmp_path_factory.mktemp("char") / "non_table.xlsx"
-    render_quietly(lambda: do_render(
-        Path(__file__).resolve().parent.parent / "template_non_table.xlsx",
-        out,
-        non_table_data(),
-    ))
+    render_quietly(lambda: do_render(TEMPLATE_NON_TABLE, out, non_table_data()))
     return load_workbook(out)
 
 

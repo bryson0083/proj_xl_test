@@ -18,6 +18,7 @@ nul
 openspec/
 
 # 測試輸出檔案
+.DS_Store
 template_table_統一測試結果_*.xlsx
 template_table_統一測試結果_*.json
 template_renderer_obj_result_*.json

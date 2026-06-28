@@ -9,10 +9,11 @@ from pathlib import Path
 
 import pandas as pd
 
-# 專案根目錄（tests/ 的上一層），模板檔放在根目錄。
-REPO_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_TABLE = REPO_ROOT / "template_table.xlsx"
-TEMPLATE_NON_TABLE = REPO_ROOT / "template_non_table.xlsx"
+# 測試用範本檔（渲染的「輸入」，含 {{標籤}}）放在 tests/test_templates/ 下。
+TESTS_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = TESTS_DIR / "test_templates"
+TEMPLATE_TABLE = TEMPLATES_DIR / "template_table.xlsx"
+TEMPLATE_NON_TABLE = TEMPLATES_DIR / "template_non_table.xlsx"
 
 
 def non_table_data() -> dict:
